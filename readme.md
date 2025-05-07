@@ -25,8 +25,8 @@ model: "meta-llama/Llama-3.3-70B-Instruct"
 population_size: 10
 generations: 5
 test_files:
-  - "data/small_text.txt"
-  - "data/large_archive.zip" # Ensure this path is correct
+  - "dataset.txt"
+  - "dataset2.txt" # Ensure this path is correct
 evolved_code_output_path: "output/best_evolved_code.c"
 # ...existing code...
 ````
@@ -51,5 +51,6 @@ The script will:
 2.  Initialize the `CodeEvolver`.
 3.  Run the evolutionary algorithm, which involves generating, compiling, and testing C code variants.
 4.  Save the best-evolved code to the path specified in `evolved_code_output_path`.
+5.  Save the evolution path in a csv file in 'logs/'
 
 You will see output in the terminal indicating the progress of the evolution, including fitness scores for each individual and generation.
