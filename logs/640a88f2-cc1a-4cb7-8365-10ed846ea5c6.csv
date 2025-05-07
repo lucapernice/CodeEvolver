@@ -1,0 +1,11 @@
+generation,individual,fitness,compression_ratio,integrity_check
+0,0,25.96,0.50906,True
+0,1,0.0,1.000743,False
+0,2,0.0,0.509063,False
+0,3,25.96,0.50906,True
+0,4,0.0,1.000387,False
+0,5,0.0,1.000264,False
+0,6,0,1.0,False
+0,7,25.96,0.50906,True
+0,8,25.96,0.50906,True
+0,9,25.96,0.50906,True

@@ -1,0 +1,193 @@
+premise: >
+  You are an AI system specialized in optimizing high performance C code for data compression algorithms.
+  Your task is to improve the performance of a given compression algorithm by modifying its code. 
+  The strings to compress are base64 encoding of images.
+  You're presented with a compression algorithm that needs improvement. 
+  Act as a genetic algorithm to evolve the algorithm over multiple generations.
+
+current_function: >
+  CURRENT COMPRESSION FUNCTION:
+  ```c
+  {compress}
+  ```
+
+  CURRENT DECOMPRESSION FUNCTION:
+  ```c
+  {decompress}
+  ```
+
+creation_task: 
+  base: >
+    TASK:
+    Modify these functions to improve the compression algorithm. Here are some possible strategies:
+    1. Improve compression ratio
+    2. Optimize compression/decompression speed
+    3. Reduce memory usage
+    4. Always maintain data integrity
+    Use your expertise to make the algorithm better. If you need to introduce new variables, declare them at the beginning of the function.
+    If you don't know how to improve the algorithm, try to introduce random changes to see if they help. 
+    
+  complex: >
+    TASK:
+    Execute substantial modifications to the code, aiming to enhance the compression algorithm, without breacking its functionality.
+    Introduce advanced functionality that could potentially improve the algorithm's performance. Use your expertise to make the algorithm better.
+    Make the new function more complex and sophisticated, exploring advanced techniques and optimizations.
+        
+    
+  uncommon: >
+    TASK:
+    Implement a distinctive or rarely used enhancement to the compression algorithm. Use your expertise and creativity to make the algorithm better.
+    Make the new function unique and different from the original one, explorning unconventional approaches to data compression.  
+
+      
+
+format: >
+  Your improvements must:
+    - Maintain the same function signatures
+    - Ensure decompression restores exactly the original data
+    - Ensure to not user undeclared variables or functions. If you need to introduce new variables, declare them at the beginning of the function.
+  Provide ONLY the two updated complete functions, nothing else. Don't include explanations, just the code.
+  Consider that the code you modify is part of a larger program, so do not break compatibility with the rest of the code by using undeclared variables or functions.
+  Delimit the functions with the following comments:
+  //INIZIO_FUNZIONE_COMPRESSIONE
+  ...
+  //FINE_FUNZIONE_COMPRESSIONE
+  //INIZIO_FUNZIONE_DECOMPRESSIONE
+  ...
+  //FINE_FUNZIONE_DECOMPRESSIONE
+
+  Example of a valid response:
+  //INIZIO_FUNZIONE_COMPRESSIONE
+  unsigned char* compress(const unsigned char* data, size_t data_size, size_t* compressed_size) {
+      // Your code here
+
+      return compressed;
+  }
+  //FINE_FUNZIONE_COMPRESSIONE
+
+  //INIZIO_FUNZIONE_DECOMPRESSIONE
+  unsigned char* decompress(const unsigned char* compressed_data, size_t compressed_size, size_t* decompressed_size) {
+      // Your code here
+
+      return decompressed;
+  }
+  //FINE_FUNZIONE_DECOMPRESSIONE
+
+
+  To better understand the context, you can see the code where these functions are used:
+
+  ```c
+  // Funzione per eseguire e valutare compressione
+  CompressionStats evaluate_compression(const char* input_file) {
+      CompressionStats stats = {0};
+      clock_t start, end;
+      
+      // Leggi file di input
+      size_t input_size;
+      unsigned char* input_data = read_file(input_file, &input_size);
+      if (input_data == NULL) {
+          printf("Impossibile leggere il file di input\n");
+          return stats;
+      }
+      
+      stats.original_size = input_size;
+      
+      // Misura tempo di compressione
+      start = clock();
+      size_t compressed_size;
+      unsigned char* compressed_data = compress(input_data, input_size, &compressed_size);
+      end = clock();
+      
+      if (compressed_data == NULL) {
+          printf("Errore durante la compressione\n");
+          free(input_data);
+          return stats;
+      }
+      
+      stats.compressed_size = compressed_size;
+      stats.compression_time = ((double)(end - start)) / CLOCKS_PER_SEC;
+      
+      // Misura tempo di decompressione
+      start = clock();
+      size_t decompressed_size;
+      unsigned char* decompressed_data = decompress(compressed_data, compressed_size, &decompressed_size);
+      end = clock();
+      
+      if (decompressed_data == NULL) {
+          printf("Errore durante la decompressione\n");
+          free(input_data);
+          free(compressed_data);
+          return stats;
+      }
+      
+      stats.decompression_time = ((double)(end - start)) / CLOCKS_PER_SEC;
+      
+      // Verifica integrità
+      stats.integrity_check = verify_integrity(input_data, input_size, decompressed_data, decompressed_size);
+      
+      // Calcola utilizzo memoria stimato (approssimativo)
+      stats.memory_used = compressed_size + decompressed_size; // Semplificazione
+      
+      // Pulizia
+      free(input_data);
+      free(compressed_data);
+      free(decompressed_data);
+      
+      return stats;
+  }
+  ```
+
+crossover_task:
+  base: >
+    The evolution process involves combining parts of two compression algorithms to create a new one.
+    This combination is called crossover. To perform crossover, you need two parent algorithms. 
+    Perform a crossover between these two compression algorithms:
+
+    ALGORITHM 1 - COMPRESSION:
+    ```c
+    {compress1}
+    ```
+
+    ALGORITHM 1 - DECOMPRESSION:
+    ```c
+    {decompress1}
+    ```
+
+    ALGORITHM 2 - COMPRESSION:
+    ```c
+    {compress2}
+    ```
+
+    ALGORITHM 2 - DECOMPRESSION:
+    ```c
+    {decompress2}
+    ```
+
+    Combine the best parts of both algorithms to create a better one.
+  complex: >
+    The evolution process involves combining parts of two compression algorithms to create a new one.
+    This combination is called crossover. To perform crossover, you need two parent algorithms. 
+    Perform a crossover between these two compression algorithms:
+
+    ALGORITHM 1 - COMPRESSION:
+    ```c
+    {compress1}
+    ```
+
+    ALGORITHM 1 - DECOMPRESSION:
+    ```c
+    {decompress1}
+    ```
+
+    ALGORITHM 2 - COMPRESSION:
+    ```c
+    {compress2}
+    ```
+
+    ALGORITHM 2 - DECOMPRESSION:
+    ```c
+    {decompress2}
+    ```
+    Combine these algorithms to create a new one, generating a new compression algorithm that is a mix of the two parents.
+    Use your expertise to make the algorithm better, mixing the best parts of both algorithms to create a more complex and performant one.
+  

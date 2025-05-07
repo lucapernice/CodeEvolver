@@ -1,0 +1,44 @@
+# Configuration for CodeEvolver
+
+# Path to the C source file to be evolved
+c_file_path: "compression.c"
+
+# LLM model to use for evolution
+# Available models (example):
+# 'deepseek-ai/DeepSeek-R1'
+# 'deepseek-ai/DeepSeek-V3-0324'
+# 'meta-llama/Llama-3.3-70B-Instruct'
+model: "meta-llama/Llama-3.3-70B-Instruct"
+
+# Whether to use reasoning in the LLM prompts (only for reasoning models)
+is_reasoning: False
+
+# Temperature for LLM sampling (0.0 to 2.0)
+temperature: 0.6
+
+# Maximum number of tokens for LLM responses
+max_tokens: 10000
+
+# Size of the population in each generation
+population_size: 8
+
+# Number of generations for the evolution
+generations: 1
+
+# Whether to enable logging (only for debugging, the logs can very be large)
+# [CSV will be created anyway]
+logs: False
+
+# List of test files to evaluate the compression algorithm
+# These files should be in the same directory as the script or provide full paths
+test_files:  
+  - "dataset2.txt"
+  # Add more test files as needed
+
+# Output file for the best evolved code
+evolved_code_output_path: "codes/evolved_compression.c"
+
+# Nebius API credentials in .env (set as environment variables)
+# Write in .env file:
+# NEBIUS_API_KEY: "your_api_key_here" 
+# NEBIUS_BASE_URL: "https://api.studio.nebius.com/v1/" # Default, if different

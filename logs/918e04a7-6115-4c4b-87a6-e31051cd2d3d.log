@@ -1,0 +1,491 @@
+Log file created at 2025-05-06 11:56:26.480771
+
+Log id: 918e04a7-6115-4c4b-87a6-e31051cd2d3d
+
+
+ Time: 2025-05-06 11:56:26.480909, Log:Read file compression.c
+ Time: 2025-05-06 11:56:26.496694, Log:Starting compression algorithm evolution...
+ Time: 2025-05-06 11:56:26.496752, Log:Model: meta-llama/Llama-3.3-70B-Instruct, Temperature: 0.6, Reasoning: False 
+ Time: 2025-05-06 11:56:26.496771, Log:Extracting compression and decompression functions
+ Time: 2025-05-06 11:56:26.496979, Log:Compression and decompression functions extracted.
+ Time: 2025-05-06 11:56:26.497040, Log:Generating initial 2 individuals asynchronously...
+ Time: 2025-05-06 11:56:26.497092, Log:Evolving functions with LLM for generation 0, individual 1
+ Time: 2025-05-06 11:56:26.497106, Log:Creating LLM prompt for generation
+ Time: 2025-05-06 11:56:26.499793, Log:Calling LLM asynchronously...
+ Time: 2025-05-06 11:56:26.503247, Log:Evolving functions with LLM for generation 0, individual 2
+ Time: 2025-05-06 11:56:26.503320, Log:Creating LLM prompt for generation
+ Time: 2025-05-06 11:56:26.505919, Log:Calling LLM asynchronously...
+ Time: 2025-05-06 11:56:42.704913, Log:LLM response: 
+
+
+ //INIZIO_FUNZIONE_COMPRESSIONE
+unsigned char* compress(const unsigned char* data, size_t data_size, size_t* compressed_size) {
+    unsigned char* compressed = (unsigned char*)malloc(data_size * 2);
+    if (compressed == NULL) return NULL;
+    
+    size_t compressed_index = 0;
+    size_t i = 0;
+    
+    while (i < data_size) {
+        unsigned char current = data[i];
+        unsigned char count = 1;
+        
+        while (i + 1 < data_size && data[i + 1] == current && count < 255) {
+            count++;
+            i++;
+        }
+        
+        if (count > 1) {
+            compressed[compressed_index++] = count;
+            compressed[compressed_index++] = current;
+        } else {
+            compressed[compressed_index++] = current;
+        }
+        
+        i++;
+    }
+    
+    compressed = (unsigned char*)realloc(compressed, compressed_index);
+    *compressed_size = compressed_index;
+    
+    return compressed;
+}
+//FINE_FUNZIONE_COMPRESSIONE
+
+//INIZIO_FUNZIONE_DECOMPRESSIONE
+unsigned char* decompress(const unsigned char* compressed_data, size_t compressed_size, size_t* decompressed_size) {
+    size_t max_size = compressed_size * 255; 
+    unsigned char* decompressed = (unsigned char*)malloc(max_size);
+    if (decompressed == NULL) return NULL;
+    
+    size_t decompressed_index = 0;
+    size_t i = 0;
+    
+    while (i < compressed_size) {
+        if (i + 1 < compressed_size && compressed_data[i] > 1) {
+            unsigned char count = compressed_data[i++];
+            unsigned char value = compressed_data[i++];
+            
+            for (unsigned char j = 0; j < count; j++) {
+                decompressed[decompressed_index++] = value;
+            }
+        } else {
+            decompressed[decompressed_index++] = compressed_data[i++];
+        }
+    }
+    
+    decompressed = (unsigned char*)realloc(decompressed, decompressed_index);
+    *decompressed_size = decompressed_index;
+    
+    return decompressed;
+}
+//FINE_FUNZIONE_DECOMPRESSIONE 
+
+
+
+ Time: 2025-05-06 11:56:42.704992, Log:Extracting evolved functions from LLM response
+ Time: 2025-05-06 11:56:42.705030, Log:Compression function extracted: 
+
+
+ unsigned char* compress(const unsigned char* data, size_t data_size, size_t* compressed_size) {
+    unsigned char* compressed = (unsigned char*)malloc(data_size * 2);
+    if (compressed == NULL) return NULL;
+    
+    size_t compressed_index = 0;
+    size_t i = 0;
+    
+    while (i < data_size) {
+        unsigned char current = data[i];
+        unsigned char count = 1;
+        
+        while (i + 1 < data_size && data[i + 1] == current && count < 255) {
+            count++;
+            i++;
+        }
+        
+        if (count > 1) {
+            compressed[compressed_index++] = count;
+            compressed[compressed_index++] = current;
+        } else {
+            compressed[compressed_index++] = current;
+        }
+        
+        i++;
+    }
+    
+    compressed = (unsigned char*)realloc(compressed, compressed_index);
+    *compressed_size = compressed_index;
+    
+    return compressed;
+}
+ 
+
+
+
+ Time: 2025-05-06 11:56:42.705060, Log:Decompression function extracted: 
+
+
+ unsigned char* decompress(const unsigned char* compressed_data, size_t compressed_size, size_t* decompressed_size) {
+    size_t max_size = compressed_size * 255; 
+    unsigned char* decompressed = (unsigned char*)malloc(max_size);
+    if (decompressed == NULL) return NULL;
+    
+    size_t decompressed_index = 0;
+    size_t i = 0;
+    
+    while (i < compressed_size) {
+        if (i + 1 < compressed_size && compressed_data[i] > 1) {
+            unsigned char count = compressed_data[i++];
+            unsigned char value = compressed_data[i++];
+            
+            for (unsigned char j = 0; j < count; j++) {
+                decompressed[decompressed_index++] = value;
+            }
+        } else {
+            decompressed[decompressed_index++] = compressed_data[i++];
+        }
+    }
+    
+    decompressed = (unsigned char*)realloc(decompressed, decompressed_index);
+    *decompressed_size = decompressed_index;
+    
+    return decompressed;
+}
+ 
+
+
+
+ Time: 2025-05-06 11:56:50.231099, Log:LLM response: 
+
+
+ //INIZIO_FUNZIONE_COMPRESSIONE
+unsigned char* compress(const unsigned char* data, size_t data_size, size_t* compressed_size) {
+    unsigned char* compressed = (unsigned char*)malloc(data_size * 2);
+    if (compressed == NULL) return NULL;
+    
+    size_t compressed_index = 0;
+    size_t i = 0;
+    size_t window_size = 4096; // Dimensione della finestra di ricerca
+    unsigned char* window = (unsigned char*)malloc(window_size);
+    if (window == NULL) {
+        free(compressed);
+        return NULL;
+    }
+    
+    while (i < data_size) {
+        unsigned char current = data[i];
+        unsigned char count = 1;
+        
+        // Ricerca di sequenze ripetute
+        while (i + 1 < data_size && data[i + 1] == current && count < 255) {
+            count++;
+            i++;
+        }
+        
+        // Compressione RLE
+        if (count > 1) {
+            compressed[compressed_index++] = count;
+            compressed[compressed_index++] = current;
+        } else {
+            // Compressione LZ77
+            size_t max_match = 0;
+            size_t max_offset = 0;
+            for (size_t j = 0; j < window_size && i - j > 0; j++) {
+                size_t match = 0;
+                while (i + match < data_size && i - j + match > 0 && data[i + match] == data[i - j + match]) {
+                    match++;
+                }
+                if (match > max_match) {
+                    max_match = match;
+                    max_offset = j;
+                }
+            }
+            if (max_match > 2) {
+                compressed[compressed_index++] = (max_offset >> 8) & 0xFF;
+                compressed[compressed_index++] = max_offset & 0xFF;
+                compressed[compressed_index++] = max_match;
+            } else {
+                compressed[compressed_index++] = current;
+            }
+        }
+        
+        i++;
+    }
+    
+    free(window);
+    compressed = (unsigned char*)realloc(compressed, compressed_index);
+    *compressed_size = compressed_index;
+    
+    return compressed;
+}
+//FINE_FUNZIONE_COMPRESSIONE
+
+//INIZIO_FUNZIONE_DECOMPRESSIONE
+unsigned char* decompress(const unsigned char* compressed_data, size_t compressed_size, size_t* decompressed_size) {
+    size_t max_size = compressed_size * 255; 
+    unsigned char* decompressed = (unsigned char*)malloc(max_size);
+    if (decompressed == NULL) return NULL;
+    
+    size_t decompressed_index = 0;
+    size_t i = 0;
+    
+    while (i < compressed_size) {
+        if (compressed_data[i] < 128) {
+            // Decompressione RLE
+            unsigned char count = compressed_data[i++];
+            unsigned char value = compressed_data[i++];
+            for (unsigned char j = 0; j < count; j++) {
+                decompressed[decompressed_index++] = value;
+            }
+        } else {
+            // Decompressione LZ77
+            size_t offset = (compressed_data[i++] << 8) | compressed_data[i++];
+            size_t match = compressed_data[i++];
+            for (size_t j = 0; j < match; j++) {
+                decompressed[decompressed_index++] = decompressed[decompressed_index - offset - 1];
+            }
+        }
+    }
+    
+    decompressed = (unsigned char*)realloc(decompressed, decompressed_index);
+    *decompressed_size = decompressed_index;
+    
+    return decompressed;
+}
+//FINE_FUNZIONE_DECOMPRESSIONE 
+
+
+
+ Time: 2025-05-06 11:56:50.231184, Log:Extracting evolved functions from LLM response
+ Time: 2025-05-06 11:56:50.231241, Log:Compression function extracted: 
+
+
+ unsigned char* compress(const unsigned char* data, size_t data_size, size_t* compressed_size) {
+    unsigned char* compressed = (unsigned char*)malloc(data_size * 2);
+    if (compressed == NULL) return NULL;
+    
+    size_t compressed_index = 0;
+    size_t i = 0;
+    size_t window_size = 4096; // Dimensione della finestra di ricerca
+    unsigned char* window = (unsigned char*)malloc(window_size);
+    if (window == NULL) {
+        free(compressed);
+        return NULL;
+    }
+    
+    while (i < data_size) {
+        unsigned char current = data[i];
+        unsigned char count = 1;
+        
+        // Ricerca di sequenze ripetute
+        while (i + 1 < data_size && data[i + 1] == current && count < 255) {
+            count++;
+            i++;
+        }
+        
+        // Compressione RLE
+        if (count > 1) {
+            compressed[compressed_index++] = count;
+            compressed[compressed_index++] = current;
+        } else {
+            // Compressione LZ77
+            size_t max_match = 0;
+            size_t max_offset = 0;
+            for (size_t j = 0; j < window_size && i - j > 0; j++) {
+                size_t match = 0;
+                while (i + match < data_size && i - j + match > 0 && data[i + match] == data[i - j + match]) {
+                    match++;
+                }
+                if (match > max_match) {
+                    max_match = match;
+                    max_offset = j;
+                }
+            }
+            if (max_match > 2) {
+                compressed[compressed_index++] = (max_offset >> 8) & 0xFF;
+                compressed[compressed_index++] = max_offset & 0xFF;
+                compressed[compressed_index++] = max_match;
+            } else {
+                compressed[compressed_index++] = current;
+            }
+        }
+        
+        i++;
+    }
+    
+    free(window);
+    compressed = (unsigned char*)realloc(compressed, compressed_index);
+    *compressed_size = compressed_index;
+    
+    return compressed;
+}
+ 
+
+
+
+ Time: 2025-05-06 11:56:50.231270, Log:Decompression function extracted: 
+
+
+ unsigned char* decompress(const unsigned char* compressed_data, size_t compressed_size, size_t* decompressed_size) {
+    size_t max_size = compressed_size * 255; 
+    unsigned char* decompressed = (unsigned char*)malloc(max_size);
+    if (decompressed == NULL) return NULL;
+    
+    size_t decompressed_index = 0;
+    size_t i = 0;
+    
+    while (i < compressed_size) {
+        if (compressed_data[i] < 128) {
+            // Decompressione RLE
+            unsigned char count = compressed_data[i++];
+            unsigned char value = compressed_data[i++];
+            for (unsigned char j = 0; j < count; j++) {
+                decompressed[decompressed_index++] = value;
+            }
+        } else {
+            // Decompressione LZ77
+            size_t offset = (compressed_data[i++] << 8) | compressed_data[i++];
+            size_t match = compressed_data[i++];
+            for (size_t j = 0; j < match; j++) {
+                decompressed[decompressed_index++] = decompressed[decompressed_index - offset - 1];
+            }
+        }
+    }
+    
+    decompressed = (unsigned char*)realloc(decompressed, decompressed_index);
+    *decompressed_size = decompressed_index;
+    
+    return decompressed;
+}
+ 
+
+
+
+ Time: 2025-05-06 11:56:50.231314, Log:Replacing functions in code with new functions.
+ Time: 2025-05-06 11:56:50.231372, Log:Replacing functions in code with new functions.
+ Time: 2025-05-06 11:56:50.231460, Log:Evaluating individual 0/2...
+ Time: 2025-05-06 11:56:50.231521, Log:Compiling and testing code.
+ Time: 2025-05-06 11:56:50.231640, Log:Write to file temp_compression.c
+ Time: 2025-05-06 11:56:50.231700, Log:Compiling code
+ Time: 2025-05-06 11:56:50.359515, Log:Running tests
+ Time: 2025-05-06 11:56:50.359581, Log:Running test on file dataset2.txt
+ Time: 2025-05-06 11:56:50.387575, Log:Test output: 
+
+
+ Dimensione originale: 557964 bytes
+Dimensione compressa: 1096068 bytes
+Rapporto di compressione: 0.509060
+Tempo di compressione: 0.001234 secondi
+Tempo di decompressione: 0.001261 secondi
+Controllo integrità: SUCCESSO
+Memoria utilizzata (stima): 1615.27 KB
+Punteggio fitness: 25.96
+ 
+
+
+
+ Time: 2025-05-06 11:56:50.387706, Log:Parsing test output: 
+
+
+ Dimensione originale: 557964 bytes
+Dimensione compressa: 1096068 bytes
+Rapporto di compressione: 0.509060
+Tempo di compressione: 0.001234 secondi
+Tempo di decompressione: 0.001261 secondi
+Controllo integrità: SUCCESSO
+Memoria utilizzata (stima): 1615.27 KB
+Punteggio fitness: 25.96
+ 
+
+
+
+ Time: 2025-05-06 11:56:50.387763, Log:Parsing test output: Rapporto di compressione
+ Time: 2025-05-06 11:56:50.387961, Log:Compression ratio: 0.509060
+ Time: 2025-05-06 11:56:50.388014, Log:Parsing test output: Tempo di compressione e decompressione
+ Time: 2025-05-06 11:56:50.388133, Log:Compression time: 0.001234
+ Time: 2025-05-06 11:56:50.388184, Log:Parsing test output: Tempo di decompressione
+ Time: 2025-05-06 11:56:50.388300, Log:Decompression time: 0.001261
+ Time: 2025-05-06 11:56:50.388351, Log:Parsing test output: Controllo integrità
+ Time: 2025-05-06 11:56:50.388466, Log:Integrity check: SUCCESSO
+ Time: 2025-05-06 11:56:50.388509, Log:Parsing test output: Punteggio fitness
+ Time: 2025-05-06 11:56:50.388601, Log:Fitness score: 25.96
+ Time: 2025-05-06 11:56:50.388751, Log:Calculating average fitness
+ Time: 2025-05-06 11:56:50.388835, Log:Average fitness: 25.96, Compression ratio: 0.50906, Compression time: 0.001234, Decompression time: 0.001261, Integrity check: True
+ Time: 2025-05-06 11:56:50.388912, Log:New best individual found
+ Time: 2025-05-06 11:56:50.389039, Log:Evaluating individual 1/2...
+ Time: 2025-05-06 11:56:50.389086, Log:Compiling and testing code.
+ Time: 2025-05-06 11:56:50.389128, Log:Write to file temp_compression.c
+ Time: 2025-05-06 11:56:50.389169, Log:Compiling code
+ Time: 2025-05-06 11:56:50.514942, Log:Running tests
+ Time: 2025-05-06 11:56:50.515019, Log:Running test on file dataset2.txt
+ Time: 2025-05-06 11:56:51.097743, Log:Test output: 
+
+
+  
+
+
+
+ Time: 2025-05-06 11:56:51.097829, Log:Parsing test output: 
+
+
+  
+
+
+
+ Time: 2025-05-06 11:56:51.097848, Log:Parsing test output: Rapporto di compressione
+ Time: 2025-05-06 11:56:51.097871, Log:Parsing test output: Tempo di compressione e decompressione
+ Time: 2025-05-06 11:56:51.097884, Log:Parsing test output: Tempo di decompressione
+ Time: 2025-05-06 11:56:51.097899, Log:Parsing test output: Controllo integrità
+ Time: 2025-05-06 11:56:51.097926, Log:Parsing test output: Punteggio fitness
+ Time: 2025-05-06 11:56:51.098022, Log:Calculating average fitness
+ Time: 2025-05-06 11:56:51.098053, Log:Error calculating average fitness: 'fitness'
+ Time: 2025-05-06 11:56:51.098196, Log:Evaluating individual 2/2...
+ Time: 2025-05-06 11:56:51.098215, Log:Compiling and testing code.
+ Time: 2025-05-06 11:56:51.098246, Log:Write to file temp_compression.c
+ Time: 2025-05-06 11:56:51.098282, Log:Compiling code
+ Time: 2025-05-06 11:56:51.210239, Log:Running tests
+ Time: 2025-05-06 11:56:51.210308, Log:Running test on file dataset2.txt
+ Time: 2025-05-06 11:56:51.630994, Log:Test output: 
+
+
+ Dimensione originale: 557964 bytes
+Dimensione compressa: 557550 bytes
+Rapporto di compressione: 1.000743
+Tempo di compressione: 0.001076 secondi
+Tempo di decompressione: 0.039749 secondi
+Controllo integrità: FALLITO
+Memoria utilizzata (stima): 23411.72 KB
+Punteggio fitness: 0.00
+ 
+
+
+
+ Time: 2025-05-06 11:56:51.631115, Log:Parsing test output: 
+
+
+ Dimensione originale: 557964 bytes
+Dimensione compressa: 557550 bytes
+Rapporto di compressione: 1.000743
+Tempo di compressione: 0.001076 secondi
+Tempo di decompressione: 0.039749 secondi
+Controllo integrità: FALLITO
+Memoria utilizzata (stima): 23411.72 KB
+Punteggio fitness: 0.00
+ 
+
+
+
+ Time: 2025-05-06 11:56:51.631183, Log:Parsing test output: Rapporto di compressione
+ Time: 2025-05-06 11:56:51.631225, Log:Compression ratio: 1.000743
+ Time: 2025-05-06 11:56:51.631244, Log:Parsing test output: Tempo di compressione e decompressione
+ Time: 2025-05-06 11:56:51.631264, Log:Compression time: 0.001076
+ Time: 2025-05-06 11:56:51.631279, Log:Parsing test output: Tempo di decompressione
+ Time: 2025-05-06 11:56:51.631296, Log:Decompression time: 0.039749
+ Time: 2025-05-06 11:56:51.631309, Log:Parsing test output: Controllo integrità
+ Time: 2025-05-06 11:56:51.631324, Log:Integrity check: FALLITO
+ Time: 2025-05-06 11:56:51.631337, Log:Parsing test output: Punteggio fitness
+ Time: 2025-05-06 11:56:51.631351, Log:Fitness score: 0.00
+ Time: 2025-05-06 11:56:51.631424, Log:Calculating average fitness
+ Time: 2025-05-06 11:56:51.631451, Log:Average fitness: 0.0, Compression ratio: 1.000743, Compression time: 0.001076, Decompression time: 0.039749, Integrity check: False
+ Time: 2025-05-06 11:56:51.631608, Log:Evolution completed! Best fitness achieved: 25.96
+ Time: 2025-05-06 11:56:51.632331, Log:Write to file evolved_compression.c
