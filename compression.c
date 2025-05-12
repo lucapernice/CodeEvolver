@@ -306,7 +306,7 @@ double calculate_fitness(CompressionStats stats) {
     }
     
     // Pesi per le diverse metriche (da modificare secondo le priorità)
-    const double weight_ratio = 20.0;
+    const double weight_ratio = 100.0;
     const double weight_compression_time = 1.0;
     const double weight_decompression_time = 1.0;
     const double weight_memory = 10.0;
@@ -315,9 +315,9 @@ double calculate_fitness(CompressionStats stats) {
     double compression_ratio = (double)stats.original_size / stats.compressed_size;
     
     // Formula di fitness (da adattare)
-    double fitness = (weight_ratio * compression_ratio) + 
-                    (weight_memory * stats.memory_used / (1024.0 * 1024.0)) + // Normalizzato in MB
-                    (weight_compression_time * stats.compression_time) +
+    double fitness = (weight_ratio * compression_ratio) - 
+                    (weight_memory * stats.memory_used / (1024.0 * 1024.0)) - // Normalizzato in MB
+                    (weight_compression_time * stats.compression_time) -
                     (weight_decompression_time * stats.decompression_time);
     return fitness;
 }

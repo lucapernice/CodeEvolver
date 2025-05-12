@@ -21,162 +21,50 @@ typedef struct {
 // Funzione di compressione da evolvere
 //INIZIO_FUNZIONE_COMPRESSIONE
 unsigned char* compress(const unsigned char* data, size_t data_size, size_t* compressed_size) {
-    unsigned char* compressed = (unsigned char*)malloc(data_size * 2 + 1024);
+    unsigned char* compressed = (unsigned char*)malloc(data_size);
     if (compressed == NULL) return NULL;
-    
+
     size_t compressed_index = 0;
     size_t i = 0;
-    unsigned char current;
-    unsigned char count;
-    unsigned char max_run = 255;
-    unsigned char min_run = 4;
-    unsigned char literal_count = 0;
-    unsigned char* literal_start = NULL;
-    unsigned char last_char = 0;
-    unsigned char xor_val = 0;
-    unsigned char last_xor = 0;
-    unsigned char consecutive_xor = 0;
-    unsigned char repeat_count = 0;
-    unsigned char next_char = 0;
-    unsigned char pattern_type = 0;
-    unsigned char bitmask = 0;
-    unsigned char bit_pattern = 0;
-    unsigned char bit_count = 0;
-    unsigned char pattern_mask = 0x55;
-    unsigned char pattern_count = 0;
-    unsigned char delta_val = 0;
-    unsigned char last_delta = 0;
-    unsigned char delta_count = 0;
-    
-    compressed[compressed_index++] = 0x05;
-    compressed[compressed_index++] = 0x0F;
-    
+
     while (i < data_size) {
-        current = data[i];
-        if (i + 1 < data_size) next_char = data[i + 1];
-        xor_val = current ^ last_char;
-        delta_val = current - last_char;
-        
-        // Bit pattern detection
-        bitmask = current ^ (current >> 1);
-        if ((bitmask & 0x7F) == 0 && i > 0) {
-            bit_pattern = current & 0x80 ? 0xFF : 0x00;
-            bit_count = 1;
-            while (i + bit_count < data_size && (data[i + bit_count] == bit_pattern || data[i + bit_count] == (bit_pattern ^ 0xFF)) && bit_count < max_run) {
-                bit_count++;
-            }
-            if (bit_count >= min_run) {
-                count = bit_count;
-                pattern_type = 4;
-                goto encode_pattern;
-            }
-        }
-        
-        // Delta encoding detection
-        if (delta_val == last_delta && i > 0) {
-            delta_count++;
-            if (delta_count >= min_run - 1) {
-                unsigned char actual_delta = 1;
-                while (i + actual_delta < data_size && (data[i + actual_delta] - data[i + actual_delta - 1]) == delta_val && actual_delta < max_run) {
-                    actual_delta++;
-                }
-                if (actual_delta >= min_run) {
-                    count = actual_delta;
-                    pattern_type = 5;
-                    goto encode_pattern;
-                }
-            }
-        } else {
-            delta_count = 0;
-            last_delta = delta_val;
-        }
-        
-        if (current == last_char) {
-            pattern_type = 0;
-            repeat_count++;
-        } else if (xor_val == last_xor && i > 0) {
-            pattern_type = 1;
-            consecutive_xor++;
-        } else if (i > 1 && current == data[i-2]) {
-            pattern_type = 2;
-        } else {
-            pattern_type = 6;
-        }
-        
-        count = 1;
-        if (pattern_type == 0) {
-            while (i + count < data_size && data[i + count] == current && count < max_run) {
-                count++;
-            }
-        } else if (pattern_type == 1) {
-            while (i + count < data_size && (data[i + count] ^ data[i + count - 1]) == xor_val && count < max_run) {
-                count++;
-            }
-        } else if (pattern_type == 2) {
-            while (i + count < data_size && data[i + count] == ((count % 2) ? next_char : current) && count < max_run) {
-                count++;
-            }
-        } else {
-            while (i + count < data_size && count < 127 && 
-                  !(data[i + count] == data[i + count - 1] || 
-                    (data[i + count] ^ data[i + count - 1]) == xor_val ||
-                    (count > 1 && data[i + count] == data[i + count - 2]) ||
-                    (data[i + count] - data[i + count - 1]) == delta_val)) {
-                count++;
-            }
-        }
-        
-        if ((pattern_type == 0 && count >= min_run) || 
-            (pattern_type == 1 && count >= 2) || 
-            (pattern_type == 2 && count >= 3) ||
-            (pattern_type == 4 && count >= min_run) ||
-            (pattern_type == 5 && count >= min_run)) {
-            encode_pattern:
-            if (literal_count > 0) {
-                compressed[compressed_index++] = literal_count;
-                memcpy(compressed + compressed_index, data + i - literal_count, literal_count);
-                compressed_index += literal_count;
-                literal_count = 0;
-            }
-            
-            compressed[compressed_index++] = 0x80 | (count - 1);
-            compressed[compressed_index++] = current;
-            if (pattern_type == 0) {
-                compressed[compressed_index++] = 0;
-            } else if (pattern_type == 1) {
-                compressed[compressed_index++] = xor_val;
-            } else if (pattern_type == 2) {
-                compressed[compressed_index++] = next_char;
-            } else if (pattern_type == 4) {
-                compressed[compressed_index++] = 0xFE;
-                compressed[compressed_index++] = bit_pattern;
-            } else if (pattern_type == 5) {
-                compressed[compressed_index++] = 0xFC;
-                compressed[compressed_index++] = delta_val;
-            }
-            i += count;
-            last_char = data[i-1];
-            last_xor = xor_val;
-        } else {
-            if (literal_count == 0) {
-                literal_start = compressed + compressed_index + 1;
-            }
-            literal_count++;
+        unsigned char current = data[i];
+        unsigned char count = 1;
+
+        while (i + 1 < data_size && data[i + 1] == current && count < 255) {
+            count++;
             i++;
-            last_char = current;
-            last_xor = xor_val;
-            
-            if (literal_count == 127 || i == data_size) {
-                compressed[compressed_index++] = literal_count;
-                memcpy(compressed + compressed_index, data + i - literal_count, literal_count);
-                compressed_index += literal_count;
-                literal_count = 0;
+        }
+
+        if (count > 5) {
+            compressed[compressed_index++] = 1; // Flag for run-length encoding
+            compressed[compressed_index++] = count;
+            compressed[compressed_index++] = current;
+        } else if (count == 5) {
+            compressed[compressed_index++] = 2; // Flag for quintuple encoding
+            compressed[compressed_index++] = current;
+        } else if (count == 4) {
+            compressed[compressed_index++] = 3; // Flag for quadruple encoding
+            compressed[compressed_index++] = current;
+        } else if (count == 3) {
+            compressed[compressed_index++] = 4; // Flag for triple encoding
+            compressed[compressed_index++] = current;
+        } else {
+            for (unsigned char j = 0; j < count; j++) {
+                compressed[compressed_index++] = current;
             }
         }
+
+        i++;
     }
-    
+
+    // Add a flag to indicate the end of the compressed data
+    compressed[compressed_index++] = 255;
+
+    // Use a more efficient allocation strategy
     compressed = (unsigned char*)realloc(compressed, compressed_index);
     *compressed_size = compressed_index;
+
     return compressed;
 }
 //FINE_FUNZIONE_COMPRESSIONE
@@ -185,92 +73,59 @@ unsigned char* compress(const unsigned char* data, size_t data_size, size_t* com
 // Funzione di decompressione da evolvere
 //INIZIO_FUNZIONE_DECOMPRESSIONE
 unsigned char* decompress(const unsigned char* compressed_data, size_t compressed_size, size_t* decompressed_size) {
-    if (compressed_size < 2) return NULL;
-    if (compressed_data[0] != 0x05) return NULL;
-    
-    size_t i = 2;
-    size_t max_size = 0;
-    
-    while (i < compressed_size) {
-        unsigned char marker = compressed_data[i++];
-        if (marker & 0x80) {
-            if (i + 2 > compressed_size) return NULL;
-            max_size += (marker & 0x7F) + 1;
-            unsigned char xor_val = compressed_data[i+1];
-            if (xor_val == 0xFE || xor_val == 0xFC || xor_val == 0xFD) {
-                i += 3;
-            } else {
-                i += 2;
-            }
-        } else {
-            if (i + marker > compressed_size) return NULL;
-            max_size += marker;
-            i += marker;
-        }
-    }
-    
+    size_t max_size = compressed_size * 255; 
     unsigned char* decompressed = (unsigned char*)malloc(max_size);
     if (decompressed == NULL) return NULL;
-    
+
     size_t decompressed_index = 0;
-    i = 2;
-    unsigned char last_char = 0;
-    unsigned char xor_val = 0;
-    
+    size_t i = 0;
+
     while (i < compressed_size) {
-        unsigned char marker = compressed_data[i++];
-        
-        if (marker & 0x80) {
-            unsigned char count = (marker & 0x7F) + 1;
-            unsigned char value = compressed_data[i++];
-            xor_val = compressed_data[i++];
-            
-            if (xor_val == 0) {
-                memset(decompressed + decompressed_index, value, count);
-                decompressed_index += count;
-                last_char = value;
-            } else if (xor_val == 0xFE) {
-                unsigned char bit_pattern = compressed_data[i++];
-                for (int j = 0; j < count; j++) {
-                    decompressed[decompressed_index++] = bit_pattern;
-                    bit_pattern ^= 0xFF;
-                }
-                last_char = bit_pattern ^ 0xFF;
-            } else if (xor_val == 0xFC) {
-                unsigned char delta = compressed_data[i++];
-                unsigned char current = value;
-                for (int j = 0; j < count; j++) {
-                    decompressed[decompressed_index++] = current;
-                    current += delta;
-                }
-                last_char = current - delta;
-            } else if (xor_val == 0xFD) {
-                unsigned char pattern_mask = compressed_data[i++];
-                unsigned char current = value;
-                for (int j = 0; j < count; j++) {
-                    decompressed[decompressed_index++] = current;
-                    current ^= pattern_mask;
-                }
-                last_char = current ^ pattern_mask;
-            } else {
-                unsigned char current = value;
-                for (int j = 0; j < count; j++) {
-                    decompressed[decompressed_index++] = current;
-                    current ^= xor_val;
-                }
-                last_char = current ^ xor_val;
+        if (compressed_data[i] == 255) {
+            // End of compressed data
+            break;
+        } else if (compressed_data[i] == 1) {
+            // Run-length encoding
+            unsigned char count = compressed_data[i + 1];
+            unsigned char value = compressed_data[i + 2];
+            i += 3;
+
+            for (unsigned char j = 0; j < count; j++) {
+                decompressed[decompressed_index++] = value;
+            }
+        } else if (compressed_data[i] == 2) {
+            // Quintuple encoding
+            unsigned char value = compressed_data[i + 1];
+            i += 2;
+
+            for (unsigned char j = 0; j < 5; j++) {
+                decompressed[decompressed_index++] = value;
+            }
+        } else if (compressed_data[i] == 3) {
+            // Quadruple encoding
+            unsigned char value = compressed_data[i + 1];
+            i += 2;
+
+            for (unsigned char j = 0; j < 4; j++) {
+                decompressed[decompressed_index++] = value;
+            }
+        } else if (compressed_data[i] == 4) {
+            // Triple encoding
+            unsigned char value = compressed_data[i + 1];
+            i += 2;
+
+            for (unsigned char j = 0; j < 3; j++) {
+                decompressed[decompressed_index++] = value;
             }
         } else {
-            unsigned char count = marker;
-            memcpy(decompressed + decompressed_index, compressed_data + i, count);
-            if (count > 0) last_char = decompressed[decompressed_index + count - 1];
-            decompressed_index += count;
-            i += count;
+            decompressed[decompressed_index++] = compressed_data[i++];
         }
     }
-    
+
+    // Use a more efficient reallocation strategy
     decompressed = (unsigned char*)realloc(decompressed, decompressed_index);
     *decompressed_size = decompressed_index;
+
     return decompressed;
 }
 //FINE_FUNZIONE_DECOMPRESSIONE
@@ -496,7 +351,7 @@ double calculate_fitness(CompressionStats stats) {
     }
     
     // Pesi per le diverse metriche (da modificare secondo le priorità)
-    const double weight_ratio = 20.0;
+    const double weight_ratio = 100.0;
     const double weight_compression_time = 1.0;
     const double weight_decompression_time = 1.0;
     const double weight_memory = 10.0;
@@ -505,7 +360,7 @@ double calculate_fitness(CompressionStats stats) {
     double compression_ratio = (double)stats.original_size / stats.compressed_size;
     
     // Formula di fitness (da adattare)
-    double fitness = (weight_ratio * compression_ratio) + 
+    double fitness = (weight_ratio * compression_ratio) - 
                     (weight_memory * stats.memory_used / (1024.0 * 1024.0)) + // Normalizzato in MB
                     (weight_compression_time * stats.compression_time) +
                     (weight_decompression_time * stats.decompression_time);

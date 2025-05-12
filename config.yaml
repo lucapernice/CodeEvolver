@@ -20,14 +20,17 @@ temperature: 0.6
 max_tokens: 10000
 
 # Size of the population in each generation
-population_size: 8
+population_size: 15
 
 # Number of generations for the evolution
-generations: 1
+generations: 15
 
 # Whether to enable logging (only for debugging, the logs can very be large)
 # [CSV will be created anyway]
 logs: False
+
+# Tournament size for parent selection (k individuals are randomly selected, and the best one is chosen)
+tournament_k: 3
 
 # List of test files to evaluate the compression algorithm
 # These files should be in the same directory as the script or provide full paths
@@ -36,7 +39,7 @@ test_files:
   # Add more test files as needed
 
 # Output file for the best evolved code
-evolved_code_output_path: "codes/evolved_compression.c"
+evolved_code_output_path: "evolved_compression.c"
 
 # Nebius API credentials in .env (set as environment variables)
 # Write in .env file:

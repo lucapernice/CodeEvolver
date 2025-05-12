@@ -39,6 +39,7 @@ async def main():
     logs = config.get("logs", False) # Default to False as per your config comment
     test_files = config.get("test_files", ["dataset2.txt"])
     evolved_code_output_path = config.get("evolved_code_output_path", "evolved_compression.c")
+    tournament_k = config.get("tournament_k", 3) # Read tournament_k
 
     # Initialize CodeEvolver
     print(f"Initializing CodeEvolver with C file: {c_file_path}")
@@ -50,7 +51,8 @@ async def main():
         max_tokens=max_tokens,
         population_size=population_size,
         generations=generations,
-        logs=logs
+        logs=logs,
+        tournament_k=tournament_k # Pass tournament_k
     )
 
     # Run the evolution

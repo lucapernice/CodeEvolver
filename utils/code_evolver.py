@@ -4,14 +4,14 @@ import random
 import subprocess
 import time
 import yaml
-from openai import OpenAI, AsyncOpenAI # Modifica: Aggiunto AsyncOpenAI
+from openai import OpenAI, AsyncOpenAI 
 from dotenv import load_dotenv
 from utils.logs_manager import LogManager
-import asyncio # Modifica: Aggiunto asyncio
+import asyncio 
 
 
 class CodeEvolver:
-    def __init__(self, c_file_path:str, model:str, is_reasoning:bool = False, temperature:float = 0.6, max_tokens:int = 10000, population_size:int =3, generations:int =2, logs:bool = True):
+    def __init__(self, c_file_path:str, model:str, is_reasoning:bool = False, temperature:float = 0.6, max_tokens:int = 10000, population_size:int =10, generations:int =2, logs:bool = True, tournament_k:int = 3): # Added tournament_k
         self.c_file_path = c_file_path
         self.population_size = population_size
         self.generations = generations
@@ -23,6 +23,7 @@ class CodeEvolver:
         self.reasoning = is_reasoning
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.tournament_k = tournament_k # Store tournament size
 
         # Modifica: Inizializza il client AsyncOpenAI una volta
         load_dotenv()
@@ -327,6 +328,46 @@ class CodeEvolver:
             return None
 
     
+    def _tournament_selection(self, fitness_scores_with_indices):
+        """
+        Selects an individual's data using tournament selection.
+        Args:
+            fitness_scores_with_indices: List of dicts {'individual_index': i, 'metrics': results}.
+                                         Assumes 'fitness' is a key in 'metrics'.
+        Returns:
+            A dictionary {'individual_index': index, 'metrics': metrics} for the winning parent.
+            Returns None if selection cannot be performed (e.g., empty input or problematic data).
+        """
+        if not fitness_scores_with_indices:
+            self.log_manager.add_log("Tournament selection error: Input 'fitness_scores_with_indices' is empty.")
+            return None
+
+        num_candidates = len(fitness_scores_with_indices)
+        actual_tournament_size = min(self.tournament_k, num_candidates)
+
+        if actual_tournament_size <= 0:
+            self.log_manager.add_log(f"Tournament selection error: Effective tournament size is {actual_tournament_size}, num_candidates: {num_candidates}.")
+            return None
+        
+        try:
+            participants_data = random.sample(fitness_scores_with_indices, actual_tournament_size)
+        except ValueError as e: 
+            self.log_manager.add_log(f"Tournament selection error during random.sample: {e}. Candidates: {num_candidates}, Size: {actual_tournament_size}")
+            return None
+
+        try:
+            for p in participants_data:
+                if 'metrics' not in p or 'fitness' not in p['metrics']:
+                    self.log_manager.add_log(f"Tournament selection error: Participant missing 'metrics' or 'fitness'. Data: {p}")
+                    return None 
+
+            winner_data = max(participants_data, key=lambda x: x['metrics']['fitness'])
+        except (ValueError, KeyError, TypeError) as e: 
+            self.log_manager.add_log(f"Tournament selection error during winner determination: {e}. Participants: {participants_data}")
+            return None
+            
+        return winner_data
+
     # Modifica: Rendi la funzione async
     async def mutate_crossover(self, parent1, parent1_metrics, parent2=None, parent2_metrics=None):
         """Apply mutation or crossover to two individuals using LLM (asynchronously)"""
@@ -408,7 +449,7 @@ class CodeEvolver:
         """Runs the complete evolutionary algorithm (asynchronously)"""
         print("Starting compression algorithm evolution...")
         self.log_manager.add_log(f'Starting compression algorithm evolution...')
-        self.log_manager.add_log(f'Model: {self.model}, Temperature: {self.temperature}, Reasoning: {self.reasoning} ')
+        self.log_manager.add_log(f'Model: {self.model}, Temperature: {self.temperature}, Reasoning: {self.reasoning}, Tournament K: {self.tournament_k}')
         
         # Extract original functions
         original_functions = self.extract_functions(self.original_code)
@@ -425,7 +466,7 @@ class CodeEvolver:
 
         evolved_functions_list = await asyncio.gather(*tasks, return_exceptions=True)
 
-        for i, result in enumerate(evolved_functions_list, 1):
+        for i, result in enumerate(evolved_functions_list, 1): # enumerate starts from 1 to match individual 'i'
             if isinstance(result, Exception):
                 print(f"Error generating initial individual {i}: {result}")
                 self.log_manager.add_log(f'Error generating initial individual {i}: {result}, adding copy of original code')
@@ -437,35 +478,58 @@ class CodeEvolver:
                 print(f"Error extracting functions for initial individual {i}, adding copy of original code")
                 self.log_manager.add_log(f'Error extracting functions for initial individual {i}, adding copy of original code')
                 population.append(self.original_code)
+        
+        while len(population) < self.population_size:
+            self.log_manager.add_log(f'Initial population smaller than expected ({len(population)}/{self.population_size}), adding copy of original code.')
+            population.append(self.original_code)
+        population = population[:self.population_size]
+
 
         # Evaluate fitness of initial population (Sincrono)
         fitness_scores = []
-        for i, individual in enumerate(population): 
+        for i, individual_code in enumerate(population): 
             try:
-                print(f"Evaluating individual {i}/{len(population)-1}...")
-                self.log_manager.add_log(f'Evaluating individual {i}/{len(population)-1}...')
-                fitness_results = self.compile_and_test(individual)
+                print(f"Evaluating initial individual {i}/{len(population)-1}...")
+                self.log_manager.add_log(f'Evaluating initial individual {i}/{len(population)-1}...')
+                if not isinstance(individual_code, str):
+                    self.log_manager.add_log(f"Error: Individual {i} is not a string. Type: {type(individual_code)}. Using original code.")
+                    individual_code = self.original_code
+                    population[i] = self.original_code
+
+                fitness_results = self.compile_and_test(individual_code)
+
                 if fitness_results:
                     fitness_scores.append({'individual_index': i, 'metrics': fitness_results})
                     print(f"  Fitness: {fitness_results['fitness']:.2f}, Ratio: {fitness_results['compression_ratio']:.2f}, Integrity: {fitness_results['integrity_check']}")
                     
-                    # Update best individual if necessary
                     if fitness_results['fitness'] > self.best_fitness and fitness_results['integrity_check']:
-                        self.log_manager.add_log(f'New best individual found')
+                        self.log_manager.add_log(f'New best individual found (initial population)')
                         self.best_fitness = fitness_results['fitness']
-                        self.best_individual = individual
+                        self.best_individual = individual_code
+                else: 
+                    self.log_manager.add_log(f"Initial individual {i} failed compilation/testing. Assigning default low fitness.")
+                    default_metrics = {'fitness': 0, 'compression_ratio': 1.0, 'compression_time': 999, 'decompression_time': 999, 'integrity_check': False}
+                    fitness_scores.append({'individual_index': i, 'metrics': default_metrics})
+                    fitness_results = default_metrics
+
             except Exception as e:
-                print(f"Error evaluating individual {i}: {e}")
-                self.log_manager.add_log(f'Error evaluating individual {i}: {e}')
-                #sobstitute indivisual with original code
-                population[i] = self.original_code
+                print(f"Error evaluating initial individual {i}: {e}")
+                self.log_manager.add_log(f'Error evaluating initial individual {i}: {e}')
+                population[i] = self.original_code 
                 default_metrics = {'fitness': 0, 'compression_ratio': 1.0, 'compression_time': 999, 'decompression_time': 999, 'integrity_check': False}
                 fitness_scores.append({'individual_index': i, 'metrics': default_metrics})
-                fitness_results = default_metrics
-            #Update csv file
-            if not fitness_results:
-                fitness_results = {'fitness': 0, 'compression_ratio': 1.0, 'integrity_check': False}
-            csv_row = { 'generation': 0, 'individual': i, 'fitness': fitness_results['fitness'], 'compression_ratio': fitness_results['compression_ratio'], 'integrity_check': fitness_results['integrity_check'] }
+                fitness_results = default_metrics 
+            
+            if not fitness_results: 
+                fitness_results = {'fitness': 0, 'compression_ratio': 1.0, 'integrity_check': False, 'compression_time': 999, 'decompression_time': 999}
+
+            csv_row = { 
+                'generation': 0, 
+                'individual': i, 
+                'fitness': fitness_results.get('fitness', 0), 
+                'compression_ratio': fitness_results.get('compression_ratio', 1.0), 
+                'integrity_check': fitness_results.get('integrity_check', False) 
+            }
             self.log_manager.add_csv_row(csv_row)
         
         
@@ -474,106 +538,115 @@ class CodeEvolver:
             print(f"\n=== Generation {gen}/{self.generations} ===")
             self.log_manager.add_log(f'=== Generation {gen}/{self.generations} ===')
             
-            # Sort population by fitness
+            if not fitness_scores:
+                self.log_manager.add_log(f"Generation {gen}: No individuals with fitness scores from previous generation. Stopping evolution.")
+                print(f"Generation {gen}: No individuals with fitness scores. Stopping evolution.")
+                break 
+
             fitness_scores.sort(key=lambda x: x['metrics']['fitness'], reverse=True)
             
-            # Select best individuals for reproduction
-            elite_size = max(4, self.population_size // 5)
-            # elite_indices = [fs[0] for fs in fitness_scores[:elite_size]]
-            # elite = [population[i] for i in elite_indices]
-            elite_data = fitness_scores[:elite_size] # Contains dicts with 'individual_index' and 'metrics'
-            elite_individuals = [population[data['individual_index']] for data in elite_data]
-            
-            # Create new population
-            new_population = elite_individuals.copy()  # Keep the elite
-            
-            # Add new individuals through mutation and crossover
-            # Prepare tasks for concurrent execution
             evolution_tasks = []
-            while len(new_population) + len(evolution_tasks) < self.population_size:
-                try:
-                    # Select parents
-                    if random.random() < 0.7:  # 70% chance of crossover
-                        parent1_data = random.choice(elite_data)
-                        parent2_data = random.choice(elite_data)
-                        parent1 = population[parent1_data['individual_index']]
-                        parent2 = population[parent2_data['individual_index']]
-                        print(f"Creating new individual by crossover")
-                        evolution_tasks.append(self.mutate_crossover(parent1, parent1_data['metrics'], parent2, parent2_data['metrics']))
-                    else:  # 30% chance of mutation
-                        parent_data = random.choice(elite_data)
-                        parent = population[parent_data['individual_index']]
-                        print(f"Creating new individual by mutation")
-                        evolution_tasks.append(self.mutate_crossover(parent, parent_data['metrics']))
-                    
-                except Exception as e:
-                    print(f"Error preparing individual for evolution: {e}")
-                    self.log_manager.add_log(f'Error preparing individual for evolution: {e}')
+            num_individuals_to_generate = self.population_size
+            
+            generated_tasks_count = 0
+            original_code_fallback_metrics = {'fitness': 0, 'compression_ratio': 1.0, 'integrity_check': False, 'compression_time': 999, 'decompression_time': 999}
+
+            while generated_tasks_count < num_individuals_to_generate:
+                parent1_data = self._tournament_selection(fitness_scores)
+                
+                if parent1_data is None:
+                    self.log_manager.add_log(f"Generation {gen}: Parent 1 selection failed. Adding mutation of original code as a task.")
+                    evolution_tasks.append(self.mutate_crossover(self.original_code, original_code_fallback_metrics))
+                    generated_tasks_count += 1
                     continue
-            
-            # Execute evolution tasks concurrently
-            if evolution_tasks:
-                evolved_children = await asyncio.gather(*evolution_tasks, return_exceptions=True)
-                for child_result in evolved_children:
-                    if isinstance(child_result, Exception):
-                        print(f"Error creating new individual during gather: {child_result}")
-                        self.log_manager.add_log(f'Error creating new individual during gather: {child_result}, adding copy of original')
-                        new_population.append(self.original_code) # Add a fallback
-                    elif child_result:
-                        new_population.append(child_result)
-                        print(f"New individual created")
+
+                parent1_code = population[parent1_data['individual_index']]
+                parent1_metrics = parent1_data['metrics']
+
+                if random.random() < 0.7 and self.population_size > 1: 
+                    parent2_data = self._tournament_selection(fitness_scores)
+                    if parent2_data is None or parent2_data['individual_index'] == parent1_data['individual_index']:
+                        self.log_manager.add_log(f"Generation {gen}: Parent 2 selection failed or same as Parent 1. Falling back to mutation of Parent 1 (idx: {parent1_data['individual_index']}).")
+                        evolution_tasks.append(self.mutate_crossover(parent1_code, parent1_metrics))
                     else:
-                        print(f"Failed to create a child, adding copy of original")
-                        self.log_manager.add_log(f'Failed to create a child, adding copy of original')
-                        new_population.append(self.original_code) # Add a fallback
-
-            # Ensure population size is maintained if tasks failed
-            while len(new_population) < self.population_size:
-                self.log_manager.add_log(f'Population too small after evolution, adding copy of original code')
-                new_population.append(self.original_code)
-
-
-            # Replace population
-            population = new_population[:self.population_size] # Ensure correct size
+                        parent2_code = population[parent2_data['individual_index']]
+                        parent2_metrics = parent2_data['metrics']
+                        self.log_manager.add_log(f"Creating new individual by crossover (Gen {gen}) between P1_idx:{parent1_data['individual_index']} and P2_idx:{parent2_data['individual_index']}")
+                        evolution_tasks.append(self.mutate_crossover(parent1_code, parent1_metrics, parent2_code, parent2_metrics))
+                else: 
+                    self.log_manager.add_log(f"Creating new individual by mutation (Gen {gen}) from P_idx:{parent1_data['individual_index']}")
+                    evolution_tasks.append(self.mutate_crossover(parent1_code, parent1_metrics))
+                
+                generated_tasks_count += 1
             
-            # Evaluate new population
-            fitness_scores = []
-            for i, individual in enumerate(population):
-                print(f"Evaluating individual {i}/{len(population)-1}...")
+            new_population_individuals = []
+            if evolution_tasks:
+                evolved_children_results = await asyncio.gather(*evolution_tasks, return_exceptions=True)
+                for i, child_result in enumerate(evolved_children_results):
+                    if isinstance(child_result, Exception):
+                        self.log_manager.add_log(f'Error creating child {i} in Gen {gen} (asyncio.gather): {child_result}, adding copy of original')
+                        new_population_individuals.append(self.original_code) 
+                    elif child_result and isinstance(child_result, str): 
+                        new_population_individuals.append(child_result)
+                    else: 
+                        self.log_manager.add_log(f'Failed to create child {i} in Gen {gen} (result type: {type(child_result)}), adding copy of original')
+                        new_population_individuals.append(self.original_code) 
+
+            while len(new_population_individuals) < self.population_size:
+                self.log_manager.add_log(f'Population too small after evolution (Gen {gen}, size {len(new_population_individuals)}), adding copy of original code')
+                new_population_individuals.append(self.original_code)
+
+            population = new_population_individuals[:self.population_size] 
+            
+            current_gen_fitness_scores = []
+            for i, individual_code in enumerate(population):
+                print(f"Evaluating Gen {gen} individual {i}/{len(population)-1}...")
                 try:
-                    self.log_manager.add_log(f'Evaluating individual {i}/{len(population)-1}...')
-                    fitness_results = self.compile_and_test(individual)
+                    self.log_manager.add_log(f'Evaluating Gen {gen} individual {i}/{len(population)-1}...')
+                    if not isinstance(individual_code, str): 
+                        self.log_manager.add_log(f"Error: Gen {gen} Individual {i} is not a string. Type: {type(individual_code)}. Using original code.")
+                        individual_code = self.original_code
+                        population[i] = self.original_code 
+
+                    fitness_results = self.compile_and_test(individual_code)
                     if fitness_results:
-                        fitness_scores.append({'individual_index': i, 'metrics': fitness_results})
+                        current_gen_fitness_scores.append({'individual_index': i, 'metrics': fitness_results})
                         print(f"  Fitness: {fitness_results['fitness']:.2f}, Ratio: {fitness_results['compression_ratio']:.2f}, Integrity: {fitness_results['integrity_check']}")
                         
-                        # Update best individual if necessary
                         if fitness_results['fitness'] > self.best_fitness and fitness_results['integrity_check']:
-                            self.log_manager.add_log(f'New best individual found')
+                            self.log_manager.add_log(f'New best individual found in Gen {gen}, Individual {i}')
                             self.best_fitness = fitness_results['fitness']
-                            self.best_individual = individual
-                    else: # compile_and_test returned None
+                            self.best_individual = individual_code
+                    else: 
+                        self.log_manager.add_log(f"Gen {gen} individual {i} failed compilation/testing. Assigning default low fitness.")
                         default_metrics = {'fitness': 0, 'compression_ratio': 1.0, 'compression_time': 999, 'decompression_time': 999, 'integrity_check': False}
-                        fitness_scores.append({'individual_index': i, 'metrics': default_metrics})
-                        fitness_results = default_metrics
-
-
-                    #Update csv file
-                    csv_row = { 'generation': gen, 'individual': i, 'fitness': fitness_results['fitness'], 'compression_ratio': fitness_results['compression_ratio'], 'integrity_check': fitness_results['integrity_check'] }
-                    self.log_manager.add_csv_row(csv_row)
+                        current_gen_fitness_scores.append({'individual_index': i, 'metrics': default_metrics})
+                        fitness_results = default_metrics 
                 except Exception as e:
-                    print(f"Error evaluating individual {i}: {e}")
-                    self.log_manager.add_log(f'Error evaluating individual {i}: {e}')
-                    #sobstitute individual with original code
+                    print(f"Error evaluating Gen {gen} individual {i}: {e}")
+                    self.log_manager.add_log(f'Error evaluating Gen {gen} individual {i}: {e}')
                     population[i] = self.original_code
                     default_metrics = {'fitness': 0, 'compression_ratio': 1.0, 'compression_time': 999, 'decompression_time': 999, 'integrity_check': False}
-                    fitness_scores.append({'individual_index': i, 'metrics': default_metrics})
-                    
+                    current_gen_fitness_scores.append({'individual_index': i, 'metrics': default_metrics})
+                    fitness_results = default_metrics
+                
+                if not fitness_results: 
+                    fitness_results = {'fitness': 0, 'compression_ratio': 1.0, 'integrity_check': False, 'compression_time': 999, 'decompression_time': 999}
+                
+                csv_row = { 
+                    'generation': gen, 
+                    'individual': i, 
+                    'fitness': fitness_results.get('fitness',0), 
+                    'compression_ratio': fitness_results.get('compression_ratio',1.0), 
+                    'integrity_check': fitness_results.get('integrity_check',False) 
+                }
+                self.log_manager.add_csv_row(csv_row)
             
-            print(f"\nBest fitness so far: {self.best_fitness:.2f}")
-            self.log_manager.add_log(f'Best fitness so far: {self.best_fitness:.2f}')
+            fitness_scores = current_gen_fitness_scores
+
+            print(f"\nBest fitness so far (End of Gen {gen}): {self.best_fitness:.2f}")
+            self.log_manager.add_log(f'Best fitness so far (End of Gen {gen}): {self.best_fitness:.2f}')
         
-        # At the end, return the best individual found
         if self.best_individual:
             print("\nEvolution completed!")            
             print(f"Best fitness achieved: {self.best_fitness:.2f}")
@@ -593,7 +666,7 @@ if __name__ == "__main__":
     models = {'Deepsick R1':'deepseek-ai/DeepSeek-R1','DeepSeek V3-0324':'deepseek-ai/DeepSeek-V3-0324', 'LLama 3.3':'meta-llama/Llama-3.3-70B-Instruct'}
 
     # Initialize CodeEvolver
-    code_evolver = CodeEvolver("compression.c", model = models['LLama 3.3'],is_reasoning=False,temperature = 0.6 ,population_size=20, generations=10, logs = False)
+    code_evolver = CodeEvolver("compression.c", model = models['LLama 3.3'],is_reasoning=False,temperature = 0.6 ,population_size=10, generations=1, logs = False, tournament_k=3) # Added tournament_k to instantiation
     
     # Modifica: Usa asyncio.run per eseguire la funzione async
     print("Starting asynchronous evolution...")
