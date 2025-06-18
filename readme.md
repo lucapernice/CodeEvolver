@@ -1,13 +1,17 @@
+This repo contains the code for a personal project. The main idea is to evolve a compression algorithm written in C with a simple Gentic Algorithm framework.
+
+
 To run the code evolution process, you'll need to configure the config.yaml file and then execute the main.py script.
 Make sure python>=3.10 and install requirements from requirements.txt
+LLMs are hosted by [Nebius AI Studio](https://studio.nebius.com/), 
 
 ### 1. Modify config.yaml
 
 The config.yaml file controls various parameters for the evolution process. Open config.yaml and adjust the following settings as needed:
 
 *   **`c_file_path`**: Path to your initial C source code file (e.g., `"compression.c"`).
-*   **`model`**: The LLM model you want to use. Examples are provided in the comments.
-*   **`is_reasoning`**: Set to `True` if your chosen model supports reasoning and you want to enable it.
+*   **`model`**: The LLM model you want to use. Examples are provided in the comments. Those models are hosted by Nebius.
+*   **`is_reasoning`**: Set to `True` if your chosen model supports reasoning.
 *   **`temperature`**: Controls the randomness of the LLM's output. Higher values (e.g., 0.8) make the output more random, while lower values (e.g., 0.2) make it more deterministic.
 *   **`max_tokens`**: The maximum number of tokens the LLM can generate in a single response.
 *   **`population_size`**: The number of individuals (code variants) in each generation. A larger population can explore more possibilities but will take longer to process.
@@ -32,7 +36,7 @@ evolved_code_output_path: "output/best_evolved_code.c"
 ````
 
 **Important:**
-*   Ensure your Nebius API key is set as an environment variable `NEBIUS_API_KEY`. You can typically do this by creating a .env file in the NLP_project directory with the content:
+*   Ensure your Nebius API key is set as an environment variable `NEBIUS_API_KEY`. You can typically do this by creating a .env file in the project directory with the content:
     ```
     NEBIUS_API_KEY="your_api_key_here"
     ```
