@@ -117,11 +117,6 @@ Below are the charts showing an example the progress of the evolution:
 *Figure 1: Fitness score evolution across generations.*
 
 &nbsp;
-
-![Compression Ratio Evolution](output_compressionratio.png)
-<br>
-*Figure 2: Compression ratio evolution during the evolutionary process.*
-
 </div>
 
 
