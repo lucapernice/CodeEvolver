@@ -3,7 +3,53 @@ This repo contains the code for a personal project. The main idea is to evolve a
 
 To run the code evolution process, you'll need to configure the config.yaml file and then execute the main.py script.
 Make sure python>=3.10 and install requirements from requirements.txt
-LLMs are hosted by [Nebius AI Studio](https://studio.nebius.com/), 
+LLMs are hosted by [Nebius AI Studio](https://studio.nebius.com/), but it's possible to change the provider by modifying the code in `utils/code_evolver.py`. 
+
+## Genetic Operations: Crossover & Mutation
+
+**Core Idea:** Use an AI (Large Language Model - LLM) to mimic genetic evolution, refining C code for data compression.
+---
+
+### 🧬 Mutation: Introducing Variations
+
+- **Concept:** Modifies a single "parent" algorithm to create a new version.
+- **Process:**
+  1. An existing compression/decompression function pair is selected.
+  2. The LLM is prompted to alter these functions.
+- **Prompting Strategy (from [`utils/prompts.yaml`](utils/prompts.yaml)):**
+  - `premise`: Sets the context (AI specializing in C code optimization for compression).
+  - `current_function`: Provides the C code of the parent's [`compress`](utils/code_evolver.py) and [`decompress`](utils/code_evolver.py) functions.
+  - `creation_task` (randomly chosen from `base`, `complex`, `uncommon`):
+    - `base`: General improvements (ratio, speed, memory).
+    - `complex`: Substantial modifications, advanced techniques.
+    - `uncommon`: Distinctive or rarely used enhancements.
+  - Feedback: Metrics from the parent (fitness, ratio, integrity) are included in the prompt to guide the LLM.
+  - `format`: Strict rules on function signatures, data integrity, and output format.
+- **Goal:** Explore new solutions by making incremental or sometimes radical changes.
+
+---
+
+### 🔄 Crossover: Combining Strengths
+
+- **Concept:** Merges features from two "parent" algorithms to create an "offspring".
+- **Process:**
+  1. Two parent algorithms are selected.
+  2. The LLM is tasked with combining them.
+- **Prompting Strategy (from [`utils/prompts.yaml`](utils/prompts.yaml)):**
+  - `premise`: Same as mutation.
+  - `crossover_task` (randomly chosen from `base`, `complex`):
+    - Provides the [`compress`](utils/code_evolver.py) and [`decompress`](utils/code_evolver.py) functions for both `ALGORITHM 1` and `ALGORITHM 2`.
+    - `base`: "Combine the best parts of both algorithms."
+    - `complex`: "Mix the best parts... to create a more complex and performant one."
+  - Feedback: Metrics from both parents are included to help the LLM identify strong traits.
+  - `format`: Same strict output formatting rules apply.
+- **Goal:** Create potentially superior algorithms by blending successful traits from different solutions.
+
+---
+
+**Outcome:** Both operations generate new C code for [`compress`](utils/code_evolver.py) and [`decompress`](utils/code_evolver.py) functions. These are then compiled and tested to evaluate their "fitness," driving the evolutionary cycle.
+
+## INSTRUCTIONS
 
 ### 1. Modify config.yaml
 
@@ -24,7 +70,7 @@ The config.yaml file controls various parameters for the evolution process. Open
 
 ````yaml
 # ...existing code...
-c_file_path: "my_custom_compression.c"
+c_file_path: "compression.c"
 model: "meta-llama/Llama-3.3-70B-Instruct"
 population_size: 10
 generations: 5
@@ -58,3 +104,28 @@ The script will:
 5.  Save the evolution path in a csv file in 'logs/'
 
 You will see output in the terminal indicating the progress of the evolution, including fitness scores for each individual and generation.
+
+### Results
+
+Below are the charts showing an example the progress of the evolution:
+
+<div align="center">
+
+![Fitness evolution](output_fitness.png)
+<br>
+*Figure 1: Fitness score evolution across generations.*
+
+&nbsp;
+
+![Compression Ratio Evolution](output_compressionratio.png)
+<br>
+*Figure 2: Compression ratio evolution during the evolutionary process.*
+
+</div>
+
+
+### Code Comparison: `compression.c` vs `evolved_compression.c`
+
+To understand how the code evolved, you can compare the original `compression.c` file with the evolved version `evolved_compression.c`. This will highlight the optimizations and changes introduced by the genetic algorithm.
+
+
