@@ -86,6 +86,7 @@ evolved_code_output_path: "output/best_evolved_code.c"
     ```
     NEBIUS_API_KEY="your_api_key_here"
     ```
+    If you don't want to use NEBIUS, modify the code in `utils/code_evolver.py`.
     The main.py script will load this using `load_dotenv()`.
 
 ### 2. Run the Evolution
