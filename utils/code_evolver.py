@@ -4,14 +4,15 @@ import random
 import subprocess
 import time
 import yaml
-from openai import OpenAI, AsyncOpenAI 
+from typing import Any, Dict
+from openai import AsyncOpenAI 
 from dotenv import load_dotenv
 from utils.logs_manager import LogManager
 import asyncio 
 
 
 class CodeEvolver:
-    def __init__(self, c_file_path:str, model:str, is_reasoning:bool = False, temperature:float = 0.6, max_tokens:int = 10000, population_size:int =10, generations:int =2, logs:bool = True, tournament_k:int = 3): # Added tournament_k
+    def __init__(self, c_file_path:str, model:str, is_reasoning:bool = False, temperature:float = 0.6, max_tokens:int = 10000, population_size:int =10, generations:int =2, logs:bool = True, tournament_k:int = 3, test_files:list[str] | None = None): # Added tournament_k
         self.c_file_path = c_file_path
         self.population_size = population_size
         self.generations = generations
@@ -24,6 +25,8 @@ class CodeEvolver:
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.tournament_k = tournament_k # Store tournament size
+        self.max_retries = 3
+        self.retry_base_delay = 1.5
 
         # Modifica: Inizializza il client AsyncOpenAI una volta
         load_dotenv()
@@ -39,9 +42,39 @@ class CodeEvolver:
         
         
         # Test files to evaluate the compression algorithm
-        self.test_files = [
-            "dataset2.txt"
-        ]
+        self.test_files = test_files if test_files else ["data/dataset2.txt"]
+
+    def _default_metrics(self):
+        return {
+            'compression_ratio': 1.0,
+            'compression_time': 999,
+            'decompression_time': 999,
+            'integrity_check': False,
+            'fitness': 0
+        }
+
+    async def _call_llm_with_retry(self, messages, operation_label):
+        last_error = None
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                self.log_manager.add_log(f'LLM call ({operation_label}) attempt {attempt}/{self.max_retries}')
+                return await self.async_client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens
+                )
+            except Exception as error:
+                last_error = error
+                wait_seconds = self.retry_base_delay * (2 ** (attempt - 1))
+                self.log_manager.add_log(f'LLM call failed ({operation_label}) attempt {attempt}: {error}')
+                if attempt < self.max_retries:
+                    self.log_manager.add_log(f'Waiting {wait_seconds:.1f}s before retry ({operation_label})')
+                    await asyncio.sleep(wait_seconds)
+
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError(f"LLM call failed without explicit exception ({operation_label})")
 
     def read_file(self, file_path):
         """Reads the content of a file"""
@@ -107,7 +140,7 @@ class CodeEvolver:
         prompt += formatting
         return prompt
     
-    def extract_evolved_functions(self, llm_response) -> dict['compress':str, 'decompress':str]:
+    def extract_evolved_functions(self, llm_response: str) -> Dict[str, str]:
         """Extracts evolved functions from LLM response
         Args:
             llm_response (str): The response from the LLM containing the evolved functions.
@@ -125,7 +158,7 @@ class CodeEvolver:
         
         # Try to extract evolved functions
         try:
-            functions = {}
+            functions: Dict[str, str] = {}
             
             # Extract compression function
             compress_match = re.search(r'//INIZIO_FUNZIONE_COMPRESSIONE\n(.*?)//FINE_FUNZIONE_COMPRESSIONE', cleaned_response, re.DOTALL)
@@ -153,26 +186,23 @@ class CodeEvolver:
         
 
     # Modifica: Rendi la funzione async
-    async def evolve_functions_with_llm(self, functions, generation, individual, feedback=None) -> dict['compress':str, 'decompress':str]:
+    async def evolve_functions_with_llm(self, functions: Dict[str, str], generation: int, individual: int, feedback: Any = None) -> Dict[str, str]:
         """Evolves functions using an LLM (asynchronously)"""
         self.log_manager.add_log(f'Evolving functions with LLM for generation {generation}, individual {individual}')
         prompt = self.create_llm_prompt(functions)
         
         try:
             self.log_manager.add_log(f'Calling LLM asynchronously...')
-            # Modifica: Usa il client async e await
-            response = await self.async_client.chat.completions.create(
-                model=self.model, 
-                messages=[
+            response = await self._call_llm_with_retry(
+                [
                     {"role": "system", "content": "You are an expert C programmer specializing in compression algorithms."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens
+                operation_label=f'generation_{generation}_individual_{individual}'
             )
             self.log_manager.add_log(f'LLM response: \n\n\n {response.choices[0].message.content} \n\n\n')
             
-            evolved_code = response.choices[0].message.content
+            evolved_code = response.choices[0].message.content or ""
 
             
             # Extract functions from response
@@ -223,17 +253,17 @@ class CodeEvolver:
                 metrics['fitness'] = float(fitness_match.group(1))
                 self.log_manager.add_log(f'Fitness score: {fitness_match.group(1)}')
         
-            return metrics
+            return {
+                'compression_ratio': metrics.get('compression_ratio', 1.0),
+                'compression_time': metrics.get('compression_time', 999),
+                'decompression_time': metrics.get('decompression_time', 999),
+                'integrity_check': metrics.get('integrity_check', False),
+                'fitness': metrics.get('fitness', 0)
+            }
         except Exception as e:
             print(f"Error parsing output: {e}")
             self.log_manager.add_log(f'Error parsing output {e}\n Returning default metrics')
-            return {
-                'compression_ratio': 1.0,
-                'compression_time': 999,
-                'decompression_time': 999,
-                'integrity_check': False,
-                'fitness': 0
-            }
+            return self._default_metrics()
         
     def compile_and_test(self, code):
         """Compiles C code and tests it with test files"""
@@ -269,24 +299,12 @@ class CodeEvolver:
                 self.log_manager.add_log(f'Error: Test on {test_file} timed out after 10 seconds')
                 print(f"Error: Test on {test_file} timed out after 10 seconds")
                 # Add a failed result with zero fitness
-                results.append({
-                    'compression_ratio': 1.0,
-                    'compression_time': 999,
-                    'decompression_time': 999,
-                    'integrity_check': False,
-                    'fitness': 0
-                })
+                results.append(self._default_metrics())
             except Exception as e:
                 self.log_manager.add_log(f'Error running test on {test_file}: {e}')
                 print(f"Error running test on {test_file}: {e}")
                 # Add a failed result with zero fitness
-                results.append({
-                    'compression_ratio': 1.0,
-                    'compression_time': 999,
-                    'decompression_time': 999,
-                    'integrity_check': False,
-                    'fitness': 0
-                })
+                results.append(self._default_metrics())
         
         # Clean up temporary files
         try:
@@ -299,11 +317,11 @@ class CodeEvolver:
         if results:
             try:
                 self.log_manager.add_log(f'Calculating average fitness')
-                avg_fitness = sum(r['fitness'] for r in results) / len(results)
-                avg_ratio = sum(r['compression_ratio'] for r in results) / len(results)
-                avg_c_time = sum(r['compression_time'] for r in results) / len(results)
-                avg_d_time = sum(r['decompression_time'] for r in results) / len(results)
-                integrity = all(r['integrity_check'] for r in results)
+                avg_fitness = sum(r.get('fitness', 0) for r in results) / len(results)
+                avg_ratio = sum(r.get('compression_ratio', 1.0) for r in results) / len(results)
+                avg_c_time = sum(r.get('compression_time', 999) for r in results) / len(results)
+                avg_d_time = sum(r.get('decompression_time', 999) for r in results) / len(results)
+                integrity = all(r.get('integrity_check', False) for r in results)
                 self.log_manager.add_log(f'Average fitness: {avg_fitness}, Compression ratio: {avg_ratio}, Compression time: {avg_c_time}, Decompression time: {avg_d_time}, Integrity check: {integrity}')
 
                 return {
@@ -316,13 +334,7 @@ class CodeEvolver:
             except Exception as e:
                 self.log_manager.add_log(f'Error calculating average fitness: {e}')
                 print(f"Error calculating average fitness: {e}")
-                return {
-                    'fitness': 0,
-                    'compression_ratio': 1.0,
-                    'compression_time': 999,
-                    'decompression_time': 999,
-                    'integrity_check': False
-                }
+                return self._default_metrics()
         else:
             self.log_manager.add_log(f'No results from tests')
             return None
@@ -371,22 +383,19 @@ class CodeEvolver:
     # Modifica: Rendi la funzione async
     async def mutate_crossover(self, parent1, parent1_metrics, parent2=None, parent2_metrics=None):
         """Apply mutation or crossover to two individuals using LLM (asynchronously)"""
-        # If there's no second parent, it's just a mutation
-        if parent2 is None:            
-            operation = "mutation"  
-            functions = self.extract_functions(parent1)
-        else: 
-            operation = 'crossover'  
+        operation = "mutation" if parent2 is None else "crossover"
         self.log_manager.add_log(f'Performing {operation} between individuals')       
         yaml_file = 'utils/prompts.yaml'
         with open(yaml_file, 'r') as file:
             prompts = yaml.safe_load(file)        
         
-        if operation == "crossover":
+        if parent2 is not None:
             # Extract functions from parents
             functions1 = self.extract_functions(parent1)
             functions2 = self.extract_functions(parent2)
             prompt = prompts['premise']
+            if parent2_metrics is None:
+                parent2_metrics = parent1_metrics
             # Add parent metrics to the prompt
             parent1_feedback = f"Parent 1 Metrics: Fitness: {parent1_metrics['fitness']:.2f}, Compression Ratio: {parent1_metrics['compression_ratio']:.2f}, Integrity: {parent1_metrics['integrity_check']}"
             parent2_feedback = f"Parent 2 Metrics: Fitness: {parent2_metrics['fitness']:.2f}, Compression Ratio: {parent2_metrics['compression_ratio']:.2f}, Integrity: {parent2_metrics['integrity_check']}"
@@ -405,6 +414,7 @@ class CodeEvolver:
             prompt += formatting
 
         else:  # mutation
+            functions = self.extract_functions(parent1)
             prompt = self.create_llm_prompt(functions)
             # Add parent metrics to the prompt
             parent_feedback = f"Parent Metrics: Fitness: {parent1_metrics['fitness']:.2f}, Compression Ratio: {parent1_metrics['compression_ratio']:.2f}, Integrity: {parent1_metrics['integrity_check']}"
@@ -413,18 +423,15 @@ class CodeEvolver:
         try:
             
             self.log_manager.add_log(f'Calling LLM asynchronously for {operation}...')
-            # Modifica: Usa il client async e await
-            response = await self.async_client.chat.completions.create(
-                model=self.model,
-                messages=[
+            response = await self._call_llm_with_retry(
+                [
                     {"role": "system", "content": "You are an expert in genetic algorithms and data compression."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens
+                operation_label=operation
             )
             
-            evolved_code = response.choices[0].message.content
+            evolved_code = response.choices[0].message.content or ""
             self.log_manager.add_log(f'LLM response: \n\n\n {evolved_code} \n\n\n')
             
             # Extract the new functions
@@ -471,9 +478,19 @@ class CodeEvolver:
                 print(f"Error generating initial individual {i}: {result}")
                 self.log_manager.add_log(f'Error generating initial individual {i}: {result}, adding copy of original code')
                 population.append(self.original_code)
-            elif result and 'compress' in result and 'decompress' in result:
-                individual = self.replace_functions(self.original_code, result)
-                population.append(individual)
+            elif isinstance(result, dict):
+                compress_code = result.get('compress')
+                decompress_code = result.get('decompress')
+                if isinstance(compress_code, str) and isinstance(decompress_code, str):
+                    individual = self.replace_functions(self.original_code, {
+                        'compress': compress_code,
+                        'decompress': decompress_code,
+                    })
+                    population.append(individual)
+                else:
+                    print(f"Error extracting functions for initial individual {i}, adding copy of original code")
+                    self.log_manager.add_log(f'Error extracting functions for initial individual {i}, adding copy of original code')
+                    population.append(self.original_code)
             else:
                 print(f"Error extracting functions for initial individual {i}, adding copy of original code")
                 self.log_manager.add_log(f'Error extracting functions for initial individual {i}, adding copy of original code')
@@ -508,7 +525,7 @@ class CodeEvolver:
                         self.best_individual = individual_code
                 else: 
                     self.log_manager.add_log(f"Initial individual {i} failed compilation/testing. Assigning default low fitness.")
-                    default_metrics = {'fitness': 0, 'compression_ratio': 1.0, 'compression_time': 999, 'decompression_time': 999, 'integrity_check': False}
+                    default_metrics = self._default_metrics()
                     fitness_scores.append({'individual_index': i, 'metrics': default_metrics})
                     fitness_results = default_metrics
 
@@ -516,12 +533,12 @@ class CodeEvolver:
                 print(f"Error evaluating initial individual {i}: {e}")
                 self.log_manager.add_log(f'Error evaluating initial individual {i}: {e}')
                 population[i] = self.original_code 
-                default_metrics = {'fitness': 0, 'compression_ratio': 1.0, 'compression_time': 999, 'decompression_time': 999, 'integrity_check': False}
+                default_metrics = self._default_metrics()
                 fitness_scores.append({'individual_index': i, 'metrics': default_metrics})
                 fitness_results = default_metrics 
             
             if not fitness_results: 
-                fitness_results = {'fitness': 0, 'compression_ratio': 1.0, 'integrity_check': False, 'compression_time': 999, 'decompression_time': 999}
+                fitness_results = self._default_metrics()
 
             csv_row = { 
                 'generation': 0, 
@@ -549,7 +566,7 @@ class CodeEvolver:
             num_individuals_to_generate = self.population_size
             
             generated_tasks_count = 0
-            original_code_fallback_metrics = {'fitness': 0, 'compression_ratio': 1.0, 'integrity_check': False, 'compression_time': 999, 'decompression_time': 999}
+            original_code_fallback_metrics = self._default_metrics()
 
             while generated_tasks_count < num_individuals_to_generate:
                 parent1_data = self._tournament_selection(fitness_scores)
@@ -619,19 +636,19 @@ class CodeEvolver:
                             self.best_individual = individual_code
                     else: 
                         self.log_manager.add_log(f"Gen {gen} individual {i} failed compilation/testing. Assigning default low fitness.")
-                        default_metrics = {'fitness': 0, 'compression_ratio': 1.0, 'compression_time': 999, 'decompression_time': 999, 'integrity_check': False}
+                        default_metrics = self._default_metrics()
                         current_gen_fitness_scores.append({'individual_index': i, 'metrics': default_metrics})
                         fitness_results = default_metrics 
                 except Exception as e:
                     print(f"Error evaluating Gen {gen} individual {i}: {e}")
                     self.log_manager.add_log(f'Error evaluating Gen {gen} individual {i}: {e}')
                     population[i] = self.original_code
-                    default_metrics = {'fitness': 0, 'compression_ratio': 1.0, 'compression_time': 999, 'decompression_time': 999, 'integrity_check': False}
+                    default_metrics = self._default_metrics()
                     current_gen_fitness_scores.append({'individual_index': i, 'metrics': default_metrics})
                     fitness_results = default_metrics
                 
                 if not fitness_results: 
-                    fitness_results = {'fitness': 0, 'compression_ratio': 1.0, 'integrity_check': False, 'compression_time': 999, 'decompression_time': 999}
+                    fitness_results = self._default_metrics()
                 
                 csv_row = { 
                     'generation': gen, 
@@ -666,7 +683,7 @@ if __name__ == "__main__":
     models = {'Deepsick R1':'deepseek-ai/DeepSeek-R1','DeepSeek V3-0324':'deepseek-ai/DeepSeek-V3-0324', 'LLama 3.3':'meta-llama/Llama-3.3-70B-Instruct'}
 
     # Initialize CodeEvolver
-    code_evolver = CodeEvolver("compression.c", model = models['LLama 3.3'],is_reasoning=False,temperature = 0.6 ,population_size=10, generations=1, logs = False, tournament_k=3) # Added tournament_k to instantiation
+    code_evolver = CodeEvolver("src/c/compression.c", model = models['LLama 3.3'],is_reasoning=False,temperature = 0.6 ,population_size=10, generations=1, logs = False, tournament_k=3) # Added tournament_k to instantiation
     
     # Modifica: Usa asyncio.run per eseguire la funzione async
     print("Starting asynchronous evolution...")
@@ -674,7 +691,7 @@ if __name__ == "__main__":
 
     # Write the evolved code to a file
     if evolved_code:
-        code_evolver.write_file("evolved_compression.c", evolved_code)
-        print("Evolved code written to 'evolved_compression.c'")
+        code_evolver.write_file("outputs/evolved/evolved_compression.c", evolved_code)
+        print("Evolved code written to 'outputs/evolved/evolved_compression.c'")
     else:
         print("No evolved code generated.")

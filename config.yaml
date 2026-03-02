@@ -1,7 +1,7 @@
 # Configuration for CodeEvolver
 
 # Path to the C source file to be evolved
-c_file_path: "compression.c"
+c_file_path: "src/c/compression.c"
 
 # LLM model to use for evolution
 # Available models (example):
@@ -35,11 +35,11 @@ tournament_k: 3
 # List of test files to evaluate the compression algorithm
 # These files should be in the same directory as the script or provide full paths
 test_files:  
-  - "dataset2.txt"
+  - "data/dataset2.txt"
   # Add more test files as needed
 
 # Output file for the best evolved code
-evolved_code_output_path: "evolved_compression.c"
+evolved_code_output_path: "outputs/evolved/evolved_compression.c"
 
 # Nebius API credentials in .env (set as environment variables)
 # Write in .env file:

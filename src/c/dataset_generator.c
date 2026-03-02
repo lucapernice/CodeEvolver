@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
     }
     
     // Write strings to file
-    FILE *file = fopen("dataset.txt", "w");
+    FILE *file = fopen("data/dataset.txt", "w");
     if (!file) {
         printf("Failed to open file for writing.\n");
         // Clean up allocated memory
@@ -123,7 +123,7 @@ int main(int argc, char *argv[]) {
     }
     free(strings);
     
-    printf("Dataset with %d unique strings has been generated in 'dataset.txt'\n", list_length);
+    printf("Dataset with %d unique strings has been generated in 'data/dataset.txt'\n", list_length);
     
     return 0;
 }

@@ -2,7 +2,6 @@ import yaml
 import asyncio
 from dotenv import load_dotenv
 from utils.code_evolver import CodeEvolver
-from utils.logs_manager import LogManager
 
 def load_config(config_path="config.yaml"):
     """Loads configuration from a YAML file."""
@@ -29,7 +28,7 @@ async def main():
         return
 
     # Extract parameters from config, providing defaults if necessary
-    c_file_path = config.get("c_file_path", "compression.c")
+    c_file_path = config.get("c_file_path", "src/c/compression.c")
     model = config.get("model", "meta-llama/Llama-3.3-70B-Instruct")
     is_reasoning = config.get("is_reasoning", False)
     temperature = config.get("temperature", 0.6)
@@ -37,8 +36,8 @@ async def main():
     population_size = config.get("population_size", 20)
     generations = config.get("generations", 10)
     logs = config.get("logs", False) # Default to False as per your config comment
-    test_files = config.get("test_files", ["dataset2.txt"])
-    evolved_code_output_path = config.get("evolved_code_output_path", "evolved_compression.c")
+    test_files = config.get("test_files", ["data/dataset2.txt"])
+    evolved_code_output_path = config.get("evolved_code_output_path", "outputs/evolved/evolved_compression.c")
     tournament_k = config.get("tournament_k", 3) # Read tournament_k
 
     # Initialize CodeEvolver
@@ -52,7 +51,8 @@ async def main():
         population_size=population_size,
         generations=generations,
         logs=logs,
-        tournament_k=tournament_k # Pass tournament_k
+        tournament_k=tournament_k, # Pass tournament_k
+        test_files=test_files
     )
 
     # Run the evolution

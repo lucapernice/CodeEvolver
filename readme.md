@@ -3,6 +3,46 @@ This repo contains the code for a personal project. The main idea is to evolve a
 
 To run the code evolution process, you'll need to configure the config.yaml file and then execute the main.py script.
 Make sure python>=3.10 and install requirements from requirements.txt
+
+## Environment setup (uv)
+
+From the project root:
+
+```bash
+uv python install 3.12
+uv venv --python 3.12 .venv
+uv pip install -r requirements.txt
+```
+
+Run commands with the local environment using either:
+
+```bash
+source .venv/bin/activate
+```
+
+or by running commands directly with `uv run` (recommended):
+
+```bash
+uv run python main.py
+```
+
+## Project structure
+
+```text
+.
+├── src/c/                 # C source files and generator
+├── data/                  # Evaluation datasets
+├── utils/                 # Python evolver and helpers
+├── outputs/
+│   ├── evolved/           # Best evolved C outputs
+│   └── plots/             # Generated charts
+├── logs/                  # CSV/log per run
+├── notebooks/             # Experimental notebooks
+├── reports/               # Audit and analysis reports
+├── config.yaml            # Runtime configuration
+└── main.py                # Entrypoint
+```
+
 LLMs are hosted by [Nebius AI Studio](https://studio.nebius.com/), but it's possible to change the provider by modifying the code in `utils/code_evolver.py`. 
 
 ## Genetic Operations: Crossover & Mutation
@@ -55,7 +95,7 @@ LLMs are hosted by [Nebius AI Studio](https://studio.nebius.com/), but it's poss
 
 The config.yaml file controls various parameters for the evolution process. Open config.yaml and adjust the following settings as needed:
 
-*   **`c_file_path`**: Path to your initial C source code file (e.g., `"compression.c"`).
+*   **`c_file_path`**: Path to your initial C source code file (e.g., `"src/c/compression.c"`).
 *   **`model`**: The LLM model you want to use. Examples are provided in the comments. Those models are hosted by Nebius.
 *   **`is_reasoning`**: Set to `True` if your chosen model supports reasoning.
 *   **`temperature`**: Controls the randomness of the LLM's output. Higher values (e.g., 0.8) make the output more random, while lower values (e.g., 0.2) make it more deterministic.
@@ -70,16 +110,18 @@ The config.yaml file controls various parameters for the evolution process. Open
 
 ````yaml
 # ...existing code...
-c_file_path: "compression.c"
+c_file_path: "src/c/compression.c"
 model: "meta-llama/Llama-3.3-70B-Instruct"
 population_size: 10
 generations: 5
 test_files:
-  - "dataset.txt"
-  - "dataset2.txt" # Ensure this path is correct
+  - "data/dataset.txt"
+  - "data/dataset2.txt" # Ensure this path is correct
 evolved_code_output_path: "output/best_evolved_code.c"
 # ...existing code...
 ````
+
+Use `outputs/evolved/evolved_compression.c` if you want to keep outputs aligned with this repository layout.
 
 **Important:**
 *   Ensure your Nebius API key is set as an environment variable `NEBIUS_API_KEY`. You can typically do this by creating a .env file in the project directory with the content:
@@ -94,7 +136,7 @@ evolved_code_output_path: "output/best_evolved_code.c"
 Once you have configured config.yaml and set up your environment variables, you can run the evolution process by executing the main.py script from your terminal within the NLP_project directory:
 
 ```bash
-python main.py
+uv run python main.py
 ```
 
 The script will:
@@ -112,7 +154,7 @@ Below are the charts showing an example the progress of the evolution:
 
 <div align="center">
 
-![Fitness evolution](output_fitness.png)
+![Fitness evolution](outputs/plots/output_fitness.png)
 <br>
 *Figure 1: Fitness score evolution across generations.*
 
@@ -120,8 +162,8 @@ Below are the charts showing an example the progress of the evolution:
 </div>
 
 
-### Code Comparison: `compression.c` vs `evolved_compression.c`
+### Code Comparison: `src/c/compression.c` vs `outputs/evolved/evolved_compression.c`
 
-To understand how the code evolved, you can compare the original `compression.c` file with the evolved version `evolved_compression.c`. This will highlight the optimizations and changes introduced by the genetic algorithm.
+To understand how the code evolved, you can compare the original `src/c/compression.c` file with the evolved version `outputs/evolved/evolved_compression.c`. This will highlight the optimizations and changes introduced by the genetic algorithm.
 
 
