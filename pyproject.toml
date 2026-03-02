@@ -1,0 +1,14 @@
+[project]
+name = "nlp-project"
+version = "0.1.0"
+description = "Genetic evolution framework for C compression algorithms"
+readme = "readme.md"
+requires-python = ">=3.10"
+dependencies = [
+    "openai",
+    "python-dotenv",
+    "pyyaml",
+]
+
+[tool.uv]
+package = false

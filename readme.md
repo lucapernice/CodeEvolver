@@ -2,7 +2,7 @@ This repo contains the code for a personal project. The main idea is to evolve a
 
 
 To run the code evolution process, you'll need to configure the config.yaml file and then execute the main.py script.
-Make sure python>=3.10 and install requirements from requirements.txt
+Make sure python>=3.10.
 
 ## Environment setup (uv)
 
@@ -11,7 +11,7 @@ From the project root:
 ```bash
 uv python install 3.12
 uv venv --python 3.12 .venv
-uv pip install -r requirements.txt
+uv sync
 ```
 
 Run commands with the local environment using either:

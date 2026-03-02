@@ -9,5 +9,5 @@ logs/*
 outputs/evolved/evolved_compression.c
 temp_compression
 temp_compression.c
-reports/example_thinking.txt
+reports/
 
