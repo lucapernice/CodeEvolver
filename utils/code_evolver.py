@@ -1,4 +1,5 @@
 import re
+import json
 import os
 import random
 import subprocess
@@ -27,6 +28,34 @@ class CodeEvolver:
         self.tournament_k = tournament_k # Store tournament size
         self.max_retries = 3
         self.retry_base_delay = 1.5
+        self.response_schema_version = "1.0"
+        self.response_format: Any = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "compression_evolution_response",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["schema_version", "full_c_code", "functions"],
+                    "properties": {
+                        "schema_version": {"type": "string"},
+                        "full_c_code": {"type": "string", "minLength": 1},
+                        "functions": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["compress", "decompress"],
+                            "properties": {
+                                "compress": {"type": "string", "minLength": 1},
+                                "decompress": {"type": "string", "minLength": 1}
+                            }
+                        },
+                        "notes": {"type": "string"},
+                        "strategy": {"type": "string"}
+                    }
+                }
+            }
+        }
 
         # Modifica: Inizializza il client AsyncOpenAI una volta
         load_dotenv()
@@ -62,7 +91,8 @@ class CodeEvolver:
                     model=self.model,
                     messages=messages,
                     temperature=self.temperature,
-                    max_tokens=self.max_tokens
+                    max_tokens=self.max_tokens,
+                    response_format=self.response_format
                 )
             except Exception as error:
                 last_error = error
@@ -87,109 +117,108 @@ class CodeEvolver:
         with open(file_path, 'w') as file:
             self.log_manager.add_log(f'Write to file {file_path}')
             file.write(content)
-
-    def extract_functions(self, code):
-        self.log_manager.add_log(f'Extracting compression and decompression functions')
-        compress_pattern = re.compile(r'//INIZIO_FUNZIONE_COMPRESSIONE\n(.*?)//FINE_FUNZIONE_COMPRESSIONE', re.DOTALL)
-        decompress_pattern = re.compile(r'//INIZIO_FUNZIONE_DECOMPRESSIONE\n(.*?)//FINE_FUNZIONE_DECOMPRESSIONE', re.DOTALL)
     
-        compress_match = compress_pattern.search(code)        
-        decompress_match = decompress_pattern.search(code)        
-        
-        if not compress_match or not decompress_match:
-            self.log_manager.add_log('Could not find compression/decompression functions')
-            raise ValueError("Could not find compression/decompression functions")
-        
-        self.log_manager.add_log(f'Compression and decompression functions extracted.')
-        return {
-            'compress': compress_match.group(1).strip(),
-            'decompress': decompress_match.group(1).strip()
-        }
-    
-    def replace_functions(self, code, new_functions):
-        """Replaces functions in the original code while preserving tags"""
-        self.log_manager.add_log(f'Replacing functions in code with new functions.')
-        # Replace compress function
-        compress_pattern = re.compile(r'//INIZIO_FUNZIONE_COMPRESSIONE\n(.*?)//FINE_FUNZIONE_COMPRESSIONE', re.DOTALL)
-        code = compress_pattern.sub(f'//INIZIO_FUNZIONE_COMPRESSIONE\n{new_functions["compress"]}//FINE_FUNZIONE_COMPRESSIONE', code)
-        
-        # Replace decompress function
-        decompress_pattern = re.compile(r'//INIZIO_FUNZIONE_DECOMPRESSIONE\n(.*?)//FINE_FUNZIONE_DECOMPRESSIONE', re.DOTALL)
-        code = decompress_pattern.sub(f'//INIZIO_FUNZIONE_DECOMPRESSIONE\n{new_functions["decompress"]}//FINE_FUNZIONE_DECOMPRESSIONE', code)
-        
-        return code
-    
-    def create_llm_prompt(self, functions):
+    def create_llm_prompt(self, current_code: str):
         """Creates the prompt for the LLM"""
         self.log_manager.add_log(f'Creating LLM prompt for generation')
         yaml_file = 'utils/prompts.yaml'
         with open(yaml_file, 'r') as file:
             prompts = yaml.safe_load(file)
         prompt = prompts['premise']
-        current = prompts['current_function'].format(
-            compress =functions['compress'],
-            decompress = functions['decompress']
-        )        
+        current = prompts['current_code'].format(full_code=current_code)
         prompt += current
         tasks_variations_list = ['base', 'complex', 'uncommon']
         #select random task
         task_variation = random.choice(tasks_variations_list)
         creation_task = prompts['creation_task'][task_variation]
         prompt += creation_task
-        formatting = prompts['format']
+        formatting = prompts['format_json'].format(schema_version=self.response_schema_version)
         prompt += formatting
         return prompt
-    
-    def extract_evolved_functions(self, llm_response: str) -> Dict[str, str]:
-        """Extracts evolved functions from LLM response
-        Args:
-            llm_response (str): The response from the LLM containing the evolved functions.
-        Returns:
-            dict: A dictionary containing the evolved compression and decompression functions.
-        """
-        self.log_manager.add_log(f'Extracting evolved functions from LLM response')
-        if self.reasoning:
-            # Remove reasoning block that precedes the </think> tag
-            if '</think>' in llm_response:
-                llm_response = llm_response.split('</think>', 1)[1]
 
-        # Clean the LLM response by removing any markdown code blocks
-        cleaned_response = llm_response.replace("```c", "").replace("```", "").strip()
-        
-        # Try to extract evolved functions
+    def _validate_llm_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        self.log_manager.add_log('Validating JSON payload from LLM response')
+        if not isinstance(payload, dict):
+            raise ValueError('LLM payload must be a JSON object')
+
+        required_keys = {'schema_version', 'full_c_code', 'functions'}
+        missing_keys = required_keys.difference(payload.keys())
+        if missing_keys:
+            raise ValueError(f"Missing required keys in LLM JSON payload: {sorted(missing_keys)}")
+
+        schema_version = payload.get('schema_version')
+        if schema_version != self.response_schema_version:
+            raise ValueError(
+                f"Unsupported schema_version '{schema_version}', expected '{self.response_schema_version}'"
+            )
+
+        full_c_code = payload.get('full_c_code')
+        if not isinstance(full_c_code, str) or not full_c_code.strip():
+            raise ValueError('full_c_code must be a non-empty string')
+
+        functions = payload.get('functions')
+        if not isinstance(functions, dict):
+            raise ValueError('functions must be a JSON object')
+
+        compress_fn = functions.get('compress')
+        decompress_fn = functions.get('decompress')
+        if not isinstance(compress_fn, str) or not compress_fn.strip():
+            raise ValueError('functions.compress must be a non-empty string')
+        if not isinstance(decompress_fn, str) or not decompress_fn.strip():
+            raise ValueError('functions.decompress must be a non-empty string')
+
+        if 'compress(' not in compress_fn or 'decompress(' not in decompress_fn:
+            raise ValueError('functions object does not contain valid compress/decompress signatures')
+
+        if 'compress(' not in full_c_code or 'decompress(' not in full_c_code:
+            raise ValueError('full_c_code does not appear to contain compress/decompress functions')
+
+        return payload
+
+    def parse_llm_json_payload(self, llm_response: str) -> Dict[str, Any]:
+        self.log_manager.add_log('Parsing LLM response as strict JSON payload')
+        content = llm_response or ''
+        if self.reasoning and '</think>' in content:
+            content = content.split('</think>', 1)[1]
+
         try:
-            functions: Dict[str, str] = {}
-            
-            # Extract compression function
-            compress_match = re.search(r'//INIZIO_FUNZIONE_COMPRESSIONE\n(.*?)//FINE_FUNZIONE_COMPRESSIONE', cleaned_response, re.DOTALL)
-            if compress_match:
-                functions['compress'] = compress_match.group(1)
-                self.log_manager.add_log(f'Compression function extracted: \n\n\n {compress_match.group(1)} \n\n\n')
-            
-            # Extract decompression function
-            decompress_match = re.search(r'//INIZIO_FUNZIONE_DECOMPRESSIONE\n(.*?)//FINE_FUNZIONE_DECOMPRESSIONE', cleaned_response, re.DOTALL)
-            if decompress_match:
-                functions['decompress'] = decompress_match.group(1)
-                self.log_manager.add_log(f'Decompression function extracted: \n\n\n {decompress_match.group(1)} \n\n\n')
-            
-            # Verify that both functions have been extracted
-            if 'compress' not in functions or 'decompress' not in functions:
-                self.log_manager.add_log(f'Could not extract both functions from LLM response')
-                raise ValueError("Could not extract both functions from LLM response")
-            
-            return functions
-        except Exception as e:
-            print(f"Error extracting functions: {e}")
-            self.log_manager.add_log(f'Error extracting functions: {e}')
-            # In case of error, return an empty function set
-            return {'compress': '', 'decompress': ''}
-        
+            payload = json.loads(content)
+        except json.JSONDecodeError as error:
+            raise ValueError(f'Invalid JSON response from LLM: {error}') from error
+
+        return self._validate_llm_payload(payload)
+
+    def _validate_candidate_c_code(self, code: str) -> None:
+        """Performs lightweight sanity checks before compilation.
+
+        Raises ValueError if the candidate looks malformed.
+        """
+        if not isinstance(code, str) or not code.strip():
+            raise ValueError('Candidate C code is empty')
+
+        required_snippets = ['#include', 'int main(', 'compress(', 'decompress(']
+        missing = [snippet for snippet in required_snippets if snippet not in code]
+        if missing:
+            raise ValueError(f'Candidate C code missing required elements: {missing}')
+
+        suspicious_patterns = [
+            r"printf\s*\(\s*'",
+            r"fprintf\s*\(\s*'",
+            r"snprintf\s*\([^\)]*'",
+        ]
+        for pattern in suspicious_patterns:
+            if re.search(pattern, code):
+                raise ValueError(f'Candidate C code contains suspicious pattern: {pattern}')
+
+        if code.count('\n') < 20:
+            raise ValueError('Candidate C code appears abnormally compressed on a single line')
+    
 
     # Modifica: Rendi la funzione async
-    async def evolve_functions_with_llm(self, functions: Dict[str, str], generation: int, individual: int, feedback: Any = None) -> Dict[str, str]:
-        """Evolves functions using an LLM (asynchronously)"""
+    async def evolve_functions_with_llm(self, current_code: str, generation: int, individual: int, feedback: Any = None) -> str:
+        """Evolves full C code using an LLM (asynchronously)."""
         self.log_manager.add_log(f'Evolving functions with LLM for generation {generation}, individual {individual}')
-        prompt = self.create_llm_prompt(functions)
+        prompt = self.create_llm_prompt(current_code)
         
         try:
             self.log_manager.add_log(f'Calling LLM asynchronously...')
@@ -203,15 +232,14 @@ class CodeEvolver:
             self.log_manager.add_log(f'LLM response: \n\n\n {response.choices[0].message.content} \n\n\n')
             
             evolved_code = response.choices[0].message.content or ""
-
-            
-            # Extract functions from response
-            return self.extract_evolved_functions(evolved_code)
+            payload = self.parse_llm_json_payload(evolved_code)
+            candidate_code = payload['full_c_code']
+            self._validate_candidate_c_code(candidate_code)
+            return candidate_code
         except Exception as e:
             print(f"Error in LLM call: {e}")
-            # In case of error, return original functions
             self.log_manager.add_log(f'Error in LLM call: {e}')
-            return functions
+            return current_code
         
     def parse_test_output(self, output):
         """Parse test program output to extract metrics"""
@@ -390,9 +418,6 @@ class CodeEvolver:
             prompts = yaml.safe_load(file)        
         
         if parent2 is not None:
-            # Extract functions from parents
-            functions1 = self.extract_functions(parent1)
-            functions2 = self.extract_functions(parent2)
             prompt = prompts['premise']
             if parent2_metrics is None:
                 parent2_metrics = parent1_metrics
@@ -405,17 +430,14 @@ class CodeEvolver:
             #select random task
             task_variation = random.choice(tasks_variations_list)
             prompt += prompts['crossover_task'][task_variation].format(
-                compress1=functions1['compress'],
-                decompress1=functions1['decompress'],
-                compress2=functions2['compress'],
-                decompress2=functions2['decompress']
+                parent1_code=parent1,
+                parent2_code=parent2
             ) 
-            formatting = prompts['format']
+            formatting = prompts['format_json'].format(schema_version=self.response_schema_version)
             prompt += formatting
 
         else:  # mutation
-            functions = self.extract_functions(parent1)
-            prompt = self.create_llm_prompt(functions)
+            prompt = self.create_llm_prompt(parent1)
             # Add parent metrics to the prompt
             parent_feedback = f"Parent Metrics: Fitness: {parent1_metrics['fitness']:.2f}, Compression Ratio: {parent1_metrics['compression_ratio']:.2f}, Integrity: {parent1_metrics['integrity_check']}"
             prompt = f"{parent_feedback}\n{prompt}"
@@ -425,7 +447,7 @@ class CodeEvolver:
             self.log_manager.add_log(f'Calling LLM asynchronously for {operation}...')
             response = await self._call_llm_with_retry(
                 [
-                    {"role": "system", "content": "You are an expert in genetic algorithms and data compression."},
+                    {"role": "system", "content": "You are an expert in genetic algorithms and data compression. Return strict JSON only."},
                     {"role": "user", "content": prompt}
                 ],
                 operation_label=operation
@@ -433,19 +455,11 @@ class CodeEvolver:
             
             evolved_code = response.choices[0].message.content or ""
             self.log_manager.add_log(f'LLM response: \n\n\n {evolved_code} \n\n\n')
-            
-            # Extract the new functions
-            new_functions = self.extract_evolved_functions(evolved_code)
-            self.log_manager.add_log(f'New functions extracted') 
-            
-            # Generate the new individual by replacing functions
-            if new_functions and 'compress' in new_functions and 'decompress' in new_functions:
-                new_individual = self.replace_functions(parent1, new_functions)
-                self.log_manager.add_log(f'New individual generated')
-                return new_individual
-            else:
-                self.log_manager.add_log(f'Error extracting new functions, returnig original individual')
-                return parent1  # Return first parent if there's a problem
+            payload = self.parse_llm_json_payload(evolved_code)
+            new_individual = payload['full_c_code']
+            self._validate_candidate_c_code(new_individual)
+            self.log_manager.add_log('New individual generated from full_c_code payload')
+            return new_individual
         except Exception as e:
             print(f"Error in genetic operation: {e}")
             self.log_manager.add_log(f'Error in genetic operation: {e}, returning original individual')
@@ -458,9 +472,6 @@ class CodeEvolver:
         self.log_manager.add_log(f'Starting compression algorithm evolution...')
         self.log_manager.add_log(f'Model: {self.model}, Temperature: {self.temperature}, Reasoning: {self.reasoning}, Tournament K: {self.tournament_k}')
         
-        # Extract original functions
-        original_functions = self.extract_functions(self.original_code)
-        
         # Create initial population
         population = [self.original_code]
         
@@ -469,7 +480,7 @@ class CodeEvolver:
         self.log_manager.add_log(f'Generating initial {self.population_size - 1} individuals asynchronously...')
         tasks = []
         for i in range(1, self.population_size):
-            tasks.append(self.evolve_functions_with_llm(original_functions, 0, i))
+            tasks.append(self.evolve_functions_with_llm(self.original_code, 0, i))
 
         evolved_functions_list = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -478,18 +489,12 @@ class CodeEvolver:
                 print(f"Error generating initial individual {i}: {result}")
                 self.log_manager.add_log(f'Error generating initial individual {i}: {result}, adding copy of original code')
                 population.append(self.original_code)
-            elif isinstance(result, dict):
-                compress_code = result.get('compress')
-                decompress_code = result.get('decompress')
-                if isinstance(compress_code, str) and isinstance(decompress_code, str):
-                    individual = self.replace_functions(self.original_code, {
-                        'compress': compress_code,
-                        'decompress': decompress_code,
-                    })
-                    population.append(individual)
+            elif isinstance(result, str):
+                if result.strip():
+                    population.append(result)
                 else:
-                    print(f"Error extracting functions for initial individual {i}, adding copy of original code")
-                    self.log_manager.add_log(f'Error extracting functions for initial individual {i}, adding copy of original code')
+                    print(f"Empty code for initial individual {i}, adding copy of original code")
+                    self.log_manager.add_log(f'Empty code for initial individual {i}, adding copy of original code')
                     population.append(self.original_code)
             else:
                 print(f"Error extracting functions for initial individual {i}, adding copy of original code")
